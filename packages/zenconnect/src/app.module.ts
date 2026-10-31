@@ -5,6 +5,7 @@ import { DevicesModule } from './devices/devices.module';
 import { TasksModule } from './tasks/tasks.module';
 import { IntentModule } from './intent/intent.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { ZenControlModule } from './zencontrol/zencontrol.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TransfersModule } from './transfers/transfers.module';
     TasksModule,
     IntentModule,
     TransfersModule,
+    ZenControlModule,
   ],
 })
 export class AppModule {}

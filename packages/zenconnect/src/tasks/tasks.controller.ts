@@ -1,51 +1,194 @@
-import { Controller, Post, Get, Body, Param, Headers } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  BadRequestException,
+} from '@nestjs/common';
 import { TasksService } from './tasks.service';
-import { CreateTaskDto, TaskResponseDto } from '../common/dto/task.dto';
+import {
+  CreateTaskDto,
+  TaskResponseDto,
+  ApproveTaskDto,
+  CancelTaskDto,
+  ListTasksQueryDto,
+  TaskState,
+  ActionType,
+} from '../common/dto/task.dto';
+import { JwtAuthGuard, RequestWithUser } from '../identity/jwt-auth.guard';
 
 @Controller('v1/tasks')
+@UseGuards(JwtAuthGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Post()
   createTask(
     @Body() createTaskDto: CreateTaskDto,
-    @Headers('x-device-id') requesterDeviceId: string,
+    @Request() req: RequestWithUser,
   ): TaskResponseDto {
-    const task = this.tasksService.create(requesterDeviceId, createTaskDto);
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    const task = this.tasksService.createTask(userId, createTaskDto);
     return this.toResponseDto(task);
+  }
+
+  @Get()
+  listTasks(
+    @Query() query: ListTasksQueryDto,
+    @Request() req: RequestWithUser,
+  ): TaskResponseDto[] {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    // Check and expire tasks before listing
+    this.tasksService.checkAndExpireTasks();
+
+    const tasks = this.tasksService.findByUserId(userId, {
+      state: query.state,
+      actionType: query.actionType,
+      deviceId: query.deviceId,
+    });
+
+    return tasks.map((task) => this.toResponseDto(task));
   }
 
   @Get(':taskId')
-  getTask(@Param('taskId') taskId: string): TaskResponseDto {
+  getTask(
+    @Param('taskId') taskId: string,
+    @Request() req: RequestWithUser,
+  ): TaskResponseDto {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    // Check and expire tasks before retrieving
+    this.tasksService.checkAndExpireTasks();
+
     const task = this.tasksService.findById(taskId);
     if (!task) {
-      throw new Error('Task not found');
+      throw new BadRequestException('Task not found');
     }
+
+    // Verify ownership
+    if (task.userId !== userId) {
+      throw new BadRequestException('Unauthorized to access this task');
+    }
+
     return this.toResponseDto(task);
+  }
+
+  @Get(':taskId/status')
+  getTaskStatus(
+    @Param('taskId') taskId: string,
+    @Request() req: RequestWithUser,
+  ): { taskId: string; state: TaskState; updatedAt: Date } {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    // Check and expire tasks before retrieving status
+    this.tasksService.checkAndExpireTasks();
+
+    const task = this.tasksService.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    // Verify ownership
+    if (task.userId !== userId) {
+      throw new BadRequestException('Unauthorized to access this task');
+    }
+
+    return {
+      taskId: task.taskId,
+      state: task.state,
+      updatedAt: task.updatedAt,
+    };
   }
 
   @Post(':taskId/approve')
-  approveTask(@Param('taskId') taskId: string): TaskResponseDto {
-    const task = this.tasksService.approve(taskId);
-    return this.toResponseDto(task);
+  approveTask(
+    @Param('taskId') taskId: string,
+    @Body() approveDto: ApproveTaskDto,
+    @Request() req: RequestWithUser,
+  ): TaskResponseDto {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    const task = this.tasksService.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    // Verify ownership
+    if (task.userId !== userId) {
+      throw new BadRequestException('Unauthorized to approve this task');
+    }
+
+    const approvedBy = approveDto.approvedBy || userId;
+    const approved = this.tasksService.approveTask(taskId, approvedBy);
+    return this.toResponseDto(approved);
   }
 
   @Post(':taskId/cancel')
-  cancelTask(@Param('taskId') taskId: string): TaskResponseDto {
-    const task = this.tasksService.cancel(taskId);
-    return this.toResponseDto(task);
+  cancelTask(
+    @Param('taskId') taskId: string,
+    @Body() cancelDto: CancelTaskDto,
+    @Request() req: RequestWithUser,
+  ): TaskResponseDto {
+    const userId = req.user?.userId;
+    if (!userId) {
+      throw new BadRequestException('User not authenticated');
+    }
+
+    const task = this.tasksService.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    // Verify ownership
+    if (task.userId !== userId) {
+      throw new BadRequestException('Unauthorized to cancel this task');
+    }
+
+    const canceled = this.tasksService.cancelTask(
+      taskId,
+      cancelDto.cancelReason,
+    );
+    return this.toResponseDto(canceled);
   }
 
   private toResponseDto(task: any): TaskResponseDto {
     return {
       taskId: task.taskId,
-      requesterDeviceId: task.requesterDeviceId,
-      executorDeviceId: task.executorDeviceId,
+      userId: task.userId,
+      sourceDeviceId: task.sourceDeviceId,
+      targetDeviceId: task.targetDeviceId,
       actionType: task.actionType,
-      status: task.status,
+      actionPayload: task.actionPayload,
+      state: task.state,
       createdAt: task.createdAt,
-      expiresAt: task.expiresAt,
       updatedAt: task.updatedAt,
+      expiresAt: task.expiresAt,
+      approvedAt: task.approvedAt,
+      approvedBy: task.approvedBy,
+      canceledAt: task.canceledAt,
+      cancelReason: task.cancelReason,
+      failureReason: task.failureReason,
     };
   }
 }

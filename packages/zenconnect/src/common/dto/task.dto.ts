@@ -1,33 +1,34 @@
-import { IsString, IsEnum, IsObject, IsOptional, IsDate } from 'class-validator';
+import { IsString, IsEnum, IsObject, IsOptional } from 'class-validator';
 
-export enum TaskStatus {
-  CREATED = 'CREATED',
-  VALIDATING = 'VALIDATING',
-  AWAITING_APPROVAL = 'AWAITING_APPROVAL',
+export enum TaskState {
   QUEUED = 'QUEUED',
-  RUNNING = 'RUNNING',
+  APPROVED = 'APPROVED',
+  EXECUTING = 'EXECUTING',
   SUCCEEDED = 'SUCCEEDED',
   FAILED = 'FAILED',
-  CANCELLED = 'CANCELLED',
+  CANCELED = 'CANCELED',
   EXPIRED = 'EXPIRED',
 }
 
 export enum ActionType {
-  TRANSFER_FILE = 'TRANSFER_FILE',
-  FIND_FILE = 'FIND_FILE',
-  OPEN_FILE = 'OPEN_FILE',
-  LIST_FILES = 'LIST_FILES',
+  TRANSFER_FILE = 'transfer_file',
+  SUMMARIZE = 'summarize',
+  LIST_DEVICES = 'list_devices',
+  TASK_STATUS = 'task_status',
 }
 
 export class CreateTaskDto {
   @IsString()
-  executorDeviceId: string;
+  sourceDeviceId: string;
+
+  @IsString()
+  targetDeviceId: string;
 
   @IsEnum(ActionType)
   actionType: ActionType;
 
   @IsObject()
-  payload: any;
+  actionPayload: any;
 
   @IsString()
   @IsOptional()
@@ -36,24 +37,62 @@ export class CreateTaskDto {
 
 export class Task {
   taskId: string;
-  requesterDeviceId: string;
-  executorDeviceId: string;
+  userId: string;
+  sourceDeviceId: string;
+  targetDeviceId: string;
   actionType: ActionType;
-  payload: any;
-  idempotencyKey: string;
-  status: TaskStatus;
+  actionPayload: any;
+  state: TaskState;
   createdAt: Date;
-  expiresAt: Date;
   updatedAt: Date;
+  expiresAt: Date;
+  approvedAt?: Date;
+  approvedBy?: string;
+  canceledAt?: Date;
+  cancelReason?: string;
+  failureReason?: string;
 }
 
 export class TaskResponseDto {
   taskId: string;
-  requesterDeviceId: string;
-  executorDeviceId: string;
+  userId: string;
+  sourceDeviceId: string;
+  targetDeviceId: string;
   actionType: ActionType;
-  status: TaskStatus;
+  actionPayload: any;
+  state: TaskState;
   createdAt: Date;
-  expiresAt: Date;
   updatedAt: Date;
+  expiresAt: Date;
+  approvedAt?: Date;
+  approvedBy?: string;
+  canceledAt?: Date;
+  cancelReason?: string;
+  failureReason?: string;
+}
+
+export class ApproveTaskDto {
+  @IsString()
+  @IsOptional()
+  approvedBy?: string;
+}
+
+export class CancelTaskDto {
+  @IsString()
+  @IsOptional()
+  cancelReason?: string;
+}
+
+export class ListTasksQueryDto {
+  @IsEnum(TaskState)
+  @IsOptional()
+  state?: TaskState;
+
+  @IsEnum(ActionType)
+  @IsOptional()
+  actionType?: ActionType;
+
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
 }

@@ -1,8 +1,8 @@
-# ZenConnect - Identity & Device Management (M1 + M2)
+# ZenConnect - Identity, Device & Task Management (M1 + M2 + M4)
 
 ## Overview
 
-ZenConnect implements secure identity and device management for ZenOne, with email/password authentication, JWT-based session management, device pairing, presence tracking, and task validation.
+ZenConnect implements secure identity management, device pairing and presence, and task state machine for ZenOne. Features include email/password authentication, JWT sessions, device pairing with trust status, and typed task orchestration with human approval flow.
 
 ## Features
 
@@ -25,6 +25,19 @@ ZenConnect implements secure identity and device management for ZenOne, with ema
 - **Task Execution Control**: Revoked devices CANNOT execute tasks (enforced before task creation)
 - **Capabilities Registry**: Track per-device capabilities (file_transfer, execute_tasks, etc.)
 - **Owner Authorization**: Only device owners can view, update, or revoke their devices
+
+### Gate 3: Task State Machine (M4) ✓
+
+- **Typed Actions**: Enum-based action types (transfer_file, summarize, list_devices, task_status)
+- **Durable State Machine**: QUEUED → APPROVED → EXECUTING → SUCCEEDED/FAILED transitions
+- **Human Approval Required**: transfer_file tasks require explicit user approval
+- **Auto-Approval**: Non-transfer actions (list_devices, task_status, summarize) auto-approved
+- **Device Validation**: Both source and target devices validated (ownership + trust status)
+- **Revocation Enforcement**: Revoked devices rejected at task creation (Gate 2 integration)
+- **Task Expiry**: Tasks expire after 24 hours if not executed
+- **State Transition Guards**: Invalid transitions rejected with clear error messages
+- **Task Filtering**: List tasks by state, actionType, or deviceId
+- **M4 Scope**: State machine only - no transfer execution (M5 will add EXECUTING → SUCCEEDED/FAILED)
 
 
 ## API Endpoints
@@ -274,6 +287,181 @@ Authorization: Bearer <access_token>
 
 **Critical:** Revoked devices CANNOT execute tasks. Any attempt to create tasks with a revoked device will fail with a 400 error.
 
+### Task Management (M4)
+
+#### `POST /v1/tasks`
+Create a new task (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "sourceDeviceId": "device-uuid-source",
+  "targetDeviceId": "device-uuid-target",
+  "actionType": "transfer_file",
+  "actionPayload": {
+    "filePath": "/path/to/file.txt",
+    "targetPath": "/path/to/destination.txt"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "taskId": "task-uuid",
+  "userId": "user-uuid",
+  "sourceDeviceId": "device-uuid-source",
+  "targetDeviceId": "device-uuid-target",
+  "actionType": "transfer_file",
+  "actionPayload": { "filePath": "/path/to/file.txt" },
+  "state": "QUEUED",
+  "createdAt": "2026-10-31T00:00:00.000Z",
+  "updatedAt": "2026-10-31T00:00:00.000Z",
+  "expiresAt": "2026-11-01T00:00:00.000Z"
+}
+```
+
+**Action Types:**
+- `transfer_file`: File transfer (requires approval)
+- `list_devices`: List devices (auto-approved)
+- `task_status`: Query task state (auto-approved)
+- `summarize`: Summarize content (auto-approved, stub)
+
+**State Machine:**
+- `transfer_file` tasks start in `QUEUED` state (require approval)
+- Other action types are auto-approved (start in `APPROVED` state)
+- Tasks expire after 24 hours if not executed
+
+**Validation:**
+- Both source and target devices must be TRUSTED
+- Revoked devices are rejected with 400 error
+- Only device owner can create tasks
+
+#### `GET /v1/tasks`
+List user's tasks (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Query Parameters:**
+- `state`: Filter by state (QUEUED, APPROVED, CANCELED, EXPIRED, etc.)
+- `actionType`: Filter by action type (transfer_file, list_devices, etc.)
+- `deviceId`: Filter by device (source or target)
+
+**Response:**
+```json
+[
+  {
+    "taskId": "task-uuid",
+    "userId": "user-uuid",
+    "sourceDeviceId": "device-uuid-source",
+    "targetDeviceId": "device-uuid-target",
+    "actionType": "transfer_file",
+    "actionPayload": {},
+    "state": "QUEUED",
+    "createdAt": "2026-10-31T00:00:00.000Z",
+    "updatedAt": "2026-10-31T00:00:00.000Z",
+    "expiresAt": "2026-11-01T00:00:00.000Z"
+  }
+]
+```
+
+#### `GET /v1/tasks/:taskId`
+Get task details (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:** Same as task object in list response, with approval/cancellation metadata when applicable.
+
+#### `GET /v1/tasks/:taskId/status`
+Query task state (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "taskId": "task-uuid",
+  "state": "APPROVED",
+  "updatedAt": "2026-10-31T00:00:00.000Z"
+}
+```
+
+#### `POST /v1/tasks/:taskId/approve`
+Approve a transfer_file task (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "approvedBy": "user-uuid"
+}
+```
+
+**Response:**
+```json
+{
+  "taskId": "task-uuid",
+  "state": "APPROVED",
+  "approvedAt": "2026-10-31T00:00:00.000Z",
+  "approvedBy": "user-uuid",
+  "updatedAt": "2026-10-31T00:00:00.000Z"
+}
+```
+
+**Valid Transitions:**
+- QUEUED → APPROVED
+- Invalid transitions return 400 error
+
+#### `POST /v1/tasks/:taskId/cancel`
+Cancel a task (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "cancelReason": "User canceled the operation"
+}
+```
+
+**Response:**
+```json
+{
+  "taskId": "task-uuid",
+  "state": "CANCELED",
+  "canceledAt": "2026-10-31T00:00:00.000Z",
+  "cancelReason": "User canceled the operation",
+  "updatedAt": "2026-10-31T00:00:00.000Z"
+}
+```
+
+**Valid Transitions:**
+- QUEUED → CANCELED
+- APPROVED → CANCELED
+
+**Note:** M4 implements only the state machine. Actual task execution (EXECUTING → SUCCEEDED/FAILED) will be added in M5.
+
 ## Security Features
 
 ### NFRs Implemented
@@ -364,13 +552,13 @@ server {
 Run the test suite:
 
 ```bash
-npm test                  # Run all tests (119 passing)
+npm test                  # Run all tests (174 passing)
 npm test:watch           # Watch mode
 npm test:cov             # With coverage
 npm run typecheck        # TypeScript type checking
 ```
 
-**Test Coverage (M1 + M2):**
+**Test Coverage (M1 + M2 + M4):**
 - ✓ 17 tests for IdentityService (registration, validation, verification)
 - ✓ 15 tests for SessionService (JWT sessions, refresh, revoke)
 - ✓ 20 tests for VerificationService (email verification, password reset)
@@ -378,6 +566,8 @@ npm run typecheck        # TypeScript type checking
 - ✓ 29 tests for DevicesService (pairing, listing, presence, revocation)
 - ✓ 15 tests for DevicesController (integration tests with JWT auth)
 - ✓ 13 tests for TaskValidationService (revoked device enforcement)
+- ✓ 32 tests for TasksService (state machine, transitions, expiry, filtering)
+- ✓ 23 tests for TasksController (task CRUD, approval, cancellation with JWT auth)
 
 All tests follow strict TDD - written before implementation.
 
@@ -420,8 +610,9 @@ Example: User logs in from laptop and phone simultaneously - both devices get va
 
 - ✅ **M1 (Identity)**: Complete - JWT auth, email verification, password recovery
 - ✅ **M2 (Device Management)**: Complete - Pairing, presence, revocation, task validation
-- 🔜 **M3-M4**: Task orchestration, typed actions, approval flow
-- 🔜 **M5**: File transfer coordination with checksums
+- ✅ **M4 (Task State Machine)**: Complete - Typed actions, approval flow, state transitions, expiry (M5 will add transfer execution)
+- 🔜 **M3 (Grants)**: File-level permissions for transfers
+- 🔜 **M5 (Transfer Execution)**: File transfer coordination with checksums, EXECUTING → SUCCEEDED/FAILED states
 - 🔜 **M6-M8**: AI intent routing, context sync, full integration
 
 ## Scope Lock

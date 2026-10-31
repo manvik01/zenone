@@ -20,8 +20,10 @@ import {
   AuditEntry,
   AuditResult,
 } from '../common/dto/zencontrol.dto';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
 
 @Controller('v1/zencontrol')
+@UseGuards(JwtAuthGuard)
 export class ZenControlController {
   constructor(
     private readonly grantsService: GrantsService,

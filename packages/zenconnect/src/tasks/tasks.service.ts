@@ -117,6 +117,59 @@ export class TasksService {
     return expiredTasks;
   }
 
+  executeTask(taskId: string): Task {
+    const task = this.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    this.validateStateTransition(task.state, TaskState.EXECUTING);
+
+    const now = new Date();
+    task.state = TaskState.EXECUTING;
+    task.updatedAt = now;
+
+    this.tasks.set(taskId, task);
+    return task;
+  }
+
+  completeTask(taskId: string, result: any): Task {
+    const task = this.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    this.validateStateTransition(task.state, TaskState.SUCCEEDED);
+
+    const now = new Date();
+    task.state = TaskState.SUCCEEDED;
+    task.completedAt = now;
+    task.transferResult = result;
+    task.updatedAt = now;
+
+    this.tasks.set(taskId, task);
+    return task;
+  }
+
+  failTask(taskId: string, reason: string, result?: any): Task {
+    const task = this.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    this.validateStateTransition(task.state, TaskState.FAILED);
+
+    const now = new Date();
+    task.state = TaskState.FAILED;
+    task.completedAt = now;
+    task.failureReason = reason;
+    task.transferResult = result;
+    task.updatedAt = now;
+
+    this.tasks.set(taskId, task);
+    return task;
+  }
+
   findById(taskId: string): Task | null {
     return this.tasks.get(taskId) || null;
   }

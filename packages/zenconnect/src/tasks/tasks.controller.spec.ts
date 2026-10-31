@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 import { TaskValidationService } from './task-validation.service';
+import { TransferExecutionService } from '../transfers/transfer-execution.service';
 import { DevicesService } from '../devices/devices.service';
 import { ActionType, TaskState, CreateTaskDto } from '../common/dto/task.dto';
 import { RequestWithUser } from '../identity/jwt-auth.guard';
@@ -35,6 +36,12 @@ describe('TasksController (M4 State Machine)', () => {
           useValue: {
             findById: jest.fn(),
             canDeviceExecuteTasks: jest.fn(),
+          },
+        },
+        {
+          provide: TransferExecutionService,
+          useValue: {
+            executeTransfer: jest.fn(),
           },
         },
       ],

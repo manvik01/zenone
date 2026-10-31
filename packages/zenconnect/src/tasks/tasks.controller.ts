@@ -10,6 +10,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { TasksService } from './tasks.service';
+import { TransferExecutionService } from '../transfers/transfer-execution.service';
 import {
   CreateTaskDto,
   TaskResponseDto,
@@ -24,7 +25,10 @@ import { JwtAuthGuard, RequestWithUser } from '../identity/jwt-auth.guard';
 @Controller('v1/tasks')
 @UseGuards(JwtAuthGuard)
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    private readonly transferExecutionService: TransferExecutionService,
+  ) {}
 
   @Post()
   createTask(
@@ -172,6 +176,14 @@ export class TasksController {
     return this.toResponseDto(canceled);
   }
 
+  @Post(':taskId/execute')
+  async executeTask(
+    @Param('taskId') taskId: string,
+  ): Promise<TaskResponseDto> {
+    const task = await this.transferExecutionService.executeTransfer(taskId);
+    return this.toResponseDto(task);
+  }
+
   private toResponseDto(task: any): TaskResponseDto {
     return {
       taskId: task.taskId,
@@ -189,6 +201,8 @@ export class TasksController {
       canceledAt: task.canceledAt,
       cancelReason: task.cancelReason,
       failureReason: task.failureReason,
+      completedAt: task.completedAt,
+      transferResult: task.transferResult,
     };
   }
 }

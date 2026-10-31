@@ -12,12 +12,14 @@ ZenOne is a cross-platform personal AI assistant: one user identity, multiple tr
 
 ## Status
 
-**v0.0.1 — documentation only.** No code yet. Code starts after the open critical decisions in [`docs/04-decisions.md`](docs/04-decisions.md) and [`docs/05-prototype-plan.md`](docs/05-prototype-plan.md#remaining-critical-decisions) are made.
+**v0.0.2 — prototype scaffolding.** NestJS backend scaffolded; critical architectural decisions locked.
 
-- MVP platforms: **Android + Windows**. iOS/macOS are designed in, shipped later.
-- Auth model: **open** (options documented).
-- Backend stack: **open** (alternatives documented).
-- Target home: private GitHub repo `zenone` (not yet created/pushed).
+- **MVP platforms:** Android + Windows. iOS/macOS are designed in, shipped later.
+- **Backend stack:** TypeScript / NestJS (ADR-002 ACCEPTED)
+- **Prototype auth:** Email + password (ADR-001 ACCEPTED for prototype; product auth upgradeable)
+- **ZenControl boundary:** Deferred (ADR-003 OPEN — module vs. separate service decision pending)
+- **Current code:** NestJS ZenConnect prototype under `packages/zenconnect/` — runnable with in-memory stores
+- **Repository:** `manvik01/zenone` on GitHub
 
 ## How to read these docs
 

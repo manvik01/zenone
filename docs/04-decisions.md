@@ -1,56 +1,92 @@
-# ZenOne — Architecture Decision Records (Open)
+# ZenOne — Architecture Decision Records
 
-**Doc ID:** ZENONE-ADR-001 · **Version:** 0.0.1 · **Status:** Open — no decision locked
-
-User direction: **defer auth and backend choices; document options.** Leans below are suggestions only.
+**Doc ID:** ZENONE-ADR-001 · **Version:** 0.0.2 · **Status:** Decisions locked for prototype
 
 | ADR | Topic | Status |
 |---|---|---|
-| ADR-001 | Authentication model | **Open** |
-| ADR-002 | ZenConnect backend stack | **Open** |
-| ADR-003 | Future monorepo layout | Proposed |
-| ADR-004 | Docs-first, code later | **Accepted** |
-| ADR-005 | MVP platforms: Android + Windows; iOS/macOS designed in | **Accepted** (from source) |
+| ADR-001 | Authentication model | **Accepted** (prototype only) |
+| ADR-002 | ZenConnect backend stack | **Accepted** |
+| ADR-003 | ZenControl boundary | **Open** (deferred) |
+| ADR-004 | Future monorepo layout | Proposed |
+| ADR-005 | Docs-first, code later | **Accepted** |
+| ADR-006 | MVP platforms: Android + Windows; iOS/macOS designed in | **Accepted** (from source) |
 
 ---
 
-## ADR-001 — Authentication model
+## ADR-001 — Authentication model (Prototype)
+
+**Status:** **ACCEPTED** for prototype only — 2026-10-31
 
 **Context.** PRD FR-01 requires email-based registration and authentication; MVP-01 adds verification, recovery, device enrollment and session management. The TDD proposes OIDC-compatible auth with passkeys and short-lived sessions. Device trust is separate: per-device asymmetric keys + pairing challenge (independent of the account auth choice).
 
-### Options
+### Decision
 
-| Option | Description | Pros | Cons |
-|---|---|---|---|
-| **A. Email OTP / magic link** | User enters email, receives a one-time code/link | Directly satisfies FR-01; no passwords; simple UX; quick to build | Depends on email deliverability; phishable codes; recovery = email access; weaker than passkeys |
-| **B. OIDC + passkeys** (TDD proposal) | Standards-based IdP (hosted or self-run) with WebAuthn passkeys, short-lived sessions | Strongest; phishing-resistant; matches TDD; enterprise-ready later | More integration work on Android/.NET; vendor/IdP choice needed; passkey recovery flows need design |
-| **C. Email + password (prototype only)** | Classic credentials, hashed | Fastest to prototype; no external deps | Weakest security; would need replacing; not aligned with TDD |
+**Prototype authentication:** Email + password with bcrypt hashing (Option C).
 
-**Possible hybrid:** email OTP for verification/recovery + passkeys as primary sign-in, delivered via an OIDC provider.
+**Rationale:**
+- Fastest path to a working prototype with zero external dependencies
+- Sufficient for demonstrating the cross-device task execution flow
+- Auth interface design allows future upgrade to OIDC/passkeys without architectural rework
 
-**Lean (not locked):** B for the product (aligns with TDD and ZenControl). For a first local prototype, A (or a stub of it) behind an auth interface keeps the swap cheap. C only for a throwaway demo.
+**Product authentication remains upgradeable:** This decision applies to the prototype only. The production authentication model (OIDC + passkeys per TDD, or email OTP) is explicitly NOT locked and should be revisited before any public deployment.
 
-**Decision needed from user:** A / B / hybrid / C-for-prototype; hosted IdP vs self-run.
+**Implementation notes:**
+- Use bcrypt or Argon2 for password hashing
+- Implement behind an auth interface/service boundary
+- JWT tokens for session management
+- Device trust remains independent: per-device asymmetric keys + pairing challenge
 
 ---
 
 ## ADR-002 — ZenConnect backend stack
 
+**Status:** **ACCEPTED** — 2026-10-31
+
 **Context.** ZenConnect needs REST + WebSocket, durable queue, Redis presence, PostgreSQL, encrypted object storage, OpenTelemetry, provider-agnostic AI adapter. TDD proposes TypeScript/NestJS.
 
-| Option | Pros | Cons |
-|---|---|---|
-| **NestJS / TypeScript** (TDD proposal) | Matches TDD; strong WebSocket + DI + modules (maps to services); shared types with a web console; large ecosystem | Node CPU limits for heavy work; runtime type safety needs validation libs |
-| **FastAPI / Python** | Fastest AI iteration; best AI/LLM library ecosystem; Pydantic typed schemas | WebSocket/concurrency at scale less mature; GIL; packaging/deploy weight |
-| **Go** | High concurrency for presence/relay; single static binary; low resource use; strong for long-lived connections | More boilerplate; smaller AI ecosystem; slower product iteration |
+### Decision
 
-**Lean (not locked):** NestJS/TS for orchestration (TDD alignment, typed contracts across services). Keep the AI adapter behind an interface so a Python sidecar remains possible. Go is the fallback if relay/presence load becomes the bottleneck.
+**Backend stack:** TypeScript with NestJS framework.
 
-**Decision needed from user:** stack choice; single service vs. split (e.g., relay separately).
+**Rationale:**
+- **TDD alignment:** Matches the reference architecture proposed in ZENONE-TDD-001
+- **Module architecture:** NestJS dependency injection and module system maps cleanly to ZenOne's service boundaries (gateway, identity, devices, tasks, intent, transfers)
+- **WebSocket support:** Built-in WebSocket support for real-time device presence and task routing
+- **Type safety:** Shared TypeScript types across services and potential web console
+- **Ecosystem:** Mature libraries for PostgreSQL, Redis, message queues, and OpenTelemetry
+- **Flexibility:** AI adapter interface allows Python sidecar for LLM-heavy operations if needed
+
+**Implementation approach:**
+- Start with a monolithic NestJS service containing all ZenConnect modules
+- AI intent router implemented as provider-agnostic adapter interface
+- Future option: split high-load services (relay, presence) to Go if performance requires
 
 ---
 
-## ADR-003 — Future monorepo layout (proposed)
+## ADR-003 — ZenControl boundary
+
+**Status:** **OPEN** (deferred) — 2026-10-31
+
+**Context.** ZenControl is responsible for device identity, user consent, permission grants, policy decisions, action approval, audit records, and revocation enforcement. The question is whether ZenControl should be:
+- **Option A:** A module within the ZenConnect service (in-process)
+- **Option B:** A separate microservice
+
+**Decision:** **Deferred until prototype coding progresses.**
+
+**Rationale:**
+- Starting with ZenControl as a module inside ZenConnect minimizes operational complexity for the prototype
+- The interface between ZenConnect and ZenControl can be designed with clear boundaries regardless of deployment model
+- Real-world usage patterns during prototype development will inform the scaling/isolation requirements
+- Both options remain viable; the choice can be made based on observed needs rather than speculation
+
+**Next steps:**
+- Implement ZenControl as a well-bounded NestJS module within ZenConnect
+- Define clear service interfaces (authorization checks, audit logging, policy evaluation)
+- Revisit this decision once prototype demonstrates actual load patterns and security isolation requirements
+
+---
+
+## ADR-004 — Future monorepo layout (proposed)
 
 ```
 zenone/
@@ -77,10 +113,16 @@ Open points: ZenControl in-process module vs. separate service; schema source of
 
 ---
 
-## ADR-004 — Docs first, code later (Accepted)
+## ADR-005 — Docs first, code later
 
-Documentation pack is written before any code; prototype starts once ADR-001/002 and the checklist in [05-prototype-plan.md](05-prototype-plan.md) are resolved. Target home: private GitHub repo `zenone`.
+**Status:** **ACCEPTED** — 2026-10-31
 
-## ADR-005 — Platforms (Accepted, from source)
+Documentation pack completed before code implementation. Prototype scaffolding begins after critical architectural decisions (ADR-001, ADR-002) are locked. Target repository: GitHub `manvik01/zenone`.
 
-Android + Windows for MVP; iOS/macOS designed into the architecture from the outset and shipped after the MVP exit decision.
+## ADR-006 — MVP platforms
+
+**Status:** **ACCEPTED** (from source PRD/TDD)
+
+**Decision:** Android + Windows for MVP launch. iOS and macOS are designed into the architecture from the outset and will be implemented after MVP validation.
+
+**Rationale:** Cross-platform demonstration (mobile + desktop, different ecosystems) while maintaining focused initial scope.

@@ -1,6 +1,6 @@
 # ZenOne — Overview
 
-**Doc ID:** ZENONE-OVR-001 · **Version:** 0.0.1 · **Status:** Draft
+**Doc ID:** ZENONE-OVR-001 · **Version:** 0.0.2 · **Status:** Prototype scaffolding in progress
 
 ## Vision
 

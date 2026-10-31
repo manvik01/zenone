@@ -1,6 +1,6 @@
 # ZenOne — First Prototype Plan
 
-**Doc ID:** ZENONE-PROTO-001 · **Version:** 0.0.1 · **Status:** Draft — starts only after critical decisions
+**Doc ID:** ZENONE-PROTO-001 · **Version:** 0.0.2 · **Status:** In progress — NestJS scaffold complete, critical decisions locked
 
 ## Goal
 
@@ -53,16 +53,27 @@ sequenceDiagram
 - Enterprise, marketplace, multi-agent
 - Deployment, scale, or performance targets
 
-## Remaining critical decisions
+## Critical decisions status
 
-Ask the user before coding:
+| # | Decision | Status |
+|---|---|---|
+| 1 | **Auth model** (ADR-001) | ✅ **LOCKED** — Email + password for prototype (upgradeable) |
+| 2 | **Backend stack** (ADR-002) | ✅ **LOCKED** — TypeScript / NestJS |
+| 3 | **ZenControl boundary** (ADR-003) | ⏸️ **DEFERRED** — Module inside ZenConnect (revisit during implementation) |
+| 4 | **Monorepo layout** | ✅ **IMPLEMENTED** — `packages/zenconnect/` structure |
+| 5 | **Prototype clients** | 🔜 **NEXT** — Real Android + Windows apps (or simulated CLI/web clients first) |
+| 6 | **Local infra** | 🔜 **NEXT** — In-memory stores for rapid iteration (Postgres/Redis/queue later) |
+| 7 | **Approval policy** | 🔜 **NEXT** — Which actions require human confirmation |
+| 8 | **AI provider** | 🔜 **LATER** — Model provider + consent rules for private content |
+| 9 | **Transfer path** | 🔜 **LATER** — Stub implementation (relay vs. direct) |
 
-1. **Auth model** (ADR-001): email OTP / OIDC+passkeys / hybrid / email+password for prototype; hosted IdP vs. self-run.
-2. **Backend stack** (ADR-002): NestJS/TS vs. FastAPI vs. Go.
-3. **Prototype clients:** real Android + Windows apps, or simulated CLI/web clients first?
-4. **ZenControl boundary:** module inside ZenConnect vs. separate service (ADR-003).
-5. **Repo:** confirm monorepo layout; when to create private `zenone` repo and push.
-6. **Local infra:** docker-compose (Postgres, Redis, queue, object storage emulator) vs. in-memory only.
-7. **Approval policy:** which actions require human confirmation in the prototype.
-8. **AI provider** (later step): which model provider behind the adapter, and consent rule for sending private content to it.
-9. **Transfer path:** relay through encrypted object storage vs. direct device-to-device (prototype uses stub either way).
+## Next steps
+
+With the backend scaffold in place:
+
+1. Implement authentication endpoints (register, login, session management)
+2. Implement device pairing flow (start/confirm)
+3. Build task creation and routing logic
+4. Add permission checking stubs
+5. Create transfer coordination stub
+6. Develop Android and/or Windows client prototypes OR CLI test clients

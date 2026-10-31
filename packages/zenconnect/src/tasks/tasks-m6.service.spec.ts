@@ -20,6 +20,52 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
   const mockSourceDeviceId = 'device-source-456';
   const mockTargetDeviceId = 'device-target-789';
 
+  // Helper: Create transfer task DTO
+  const createTransferTaskDto = (sourcePath = '/path/to/file.txt', targetPath = '/destination/file.txt'): CreateTaskDto => ({
+    sourceDeviceId: mockSourceDeviceId,
+    targetDeviceId: mockTargetDeviceId,
+    actionType: ActionType.TRANSFER_FILE,
+    actionPayload: { sourcePath, targetPath },
+  });
+
+  // Helper: Create mock device
+  const createMockDevice = (deviceId: string, trustStatus: TrustStatus) => ({
+    deviceId,
+    userId: mockUserId,
+    platform: Platform.MACOS,
+    deviceName: 'Device',
+    publicKey: 'key',
+    capabilities: [],
+    lastSeen: new Date(),
+    trustStatus,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // Helper: Setup basic mocks
+  const setupBasicMocks = () => {
+    jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
+  };
+
+  // Helper: Setup trusted device mocks
+  const setupTrustedDeviceMocks = () => {
+    jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => 
+      createMockDevice(deviceId, TrustStatus.TRUSTED)
+    );
+  };
+
+  // Helper: Setup valid grant mocks
+  const setupValidGrantMocks = () => {
+    jest.spyOn(grantsService, 'checkGrant').mockReturnValue({ granted: true });
+  };
+
+  // Helper: Create and approve task
+  const createAndApproveTask = (dto: CreateTaskDto) => {
+    const task = service.createTask(mockUserId, dto);
+    service.approveTask(task.taskId, mockUserId);
+    return task;
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,20 +103,10 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-1: Offline Detection → QUEUED', () => {
     it('should create task in QUEUED state when target device is offline', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: { 
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
-
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
+      setupBasicMocks();
       jest.spyOn(devicesService, 'isDeviceOnline').mockReturnValue(false);
 
-      const task = service.createTask(mockUserId, createTaskDto);
+      const task = service.createTask(mockUserId, createTransferTaskDto());
 
       expect(task.state).toBe(TaskState.QUEUED);
       expect(task.expiresAt).toBeDefined();
@@ -78,44 +114,23 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should set expiresAt to 24 hours from creation for queued task', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: { 
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
+      const task = service.createTask(mockUserId, createTransferTaskDto());
 
       const expectedExpiry = new Date(task.createdAt.getTime() + 24 * 60 * 60 * 1000);
       const timeDiff = Math.abs(task.expiresAt.getTime() - expectedExpiry.getTime());
-      expect(timeDiff).toBeLessThan(100); // Allow 100ms tolerance
+      expect(timeDiff).toBeLessThan(100);
     });
   });
 
   describe('M6-2: Expiry Enforcement', () => {
     it('should transition QUEUED → EXPIRED when past deadline', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {},
-      };
-
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
+      setupBasicMocks();
+      const task = service.createTask(mockUserId, createTransferTaskDto('', ''));
       
-      // Manually set expiry to past
       const taskToExpire = service.findById(task.taskId);
-      if (taskToExpire) {
-        taskToExpire.expiresAt = new Date(Date.now() - 1000);
-      }
+      if (taskToExpire) taskToExpire.expiresAt = new Date(Date.now() - 1000);
 
       const expiredTasks = service.checkAndExpireTasks();
 
@@ -124,46 +139,24 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should never set SUCCEEDED for expired task', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {},
-      };
-
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
+      setupBasicMocks();
+      const task = service.createTask(mockUserId, createTransferTaskDto('', ''));
       
-      // Manually set expiry to past and expire
       const taskToExpire = service.findById(task.taskId);
-      if (taskToExpire) {
-        taskToExpire.expiresAt = new Date(Date.now() - 1000);
-      }
+      if (taskToExpire) taskToExpire.expiresAt = new Date(Date.now() - 1000);
       service.checkAndExpireTasks();
 
-      // Try to complete expired task
       expect(() => service.completeTask(task.taskId, {})).toThrow(
         'Invalid state transition: EXPIRED → SUCCEEDED'
       );
     });
 
     it('should provide clear expiry reason in task state', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {},
-      };
-
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
+      setupBasicMocks();
+      const task = service.createTask(mockUserId, createTransferTaskDto('', ''));
       
       const taskToExpire = service.findById(task.taskId);
-      if (taskToExpire) {
-        taskToExpire.expiresAt = new Date(Date.now() - 1000);
-      }
+      if (taskToExpire) taskToExpire.expiresAt = new Date(Date.now() - 1000);
 
       const expiredTasks = service.checkAndExpireTasks();
 
@@ -174,36 +167,13 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-3: Device Revocation Recheck Before Execution', () => {
     it('should fail pre-execution validation when target device is revoked', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
+      jest.spyOn(devicesService, 'findById').mockReturnValue(
+        createMockDevice(mockTargetDeviceId, TrustStatus.REVOKED)
+      );
 
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      // Mock device as revoked
-      jest.spyOn(devicesService, 'findById').mockReturnValue({
-        deviceId: mockTargetDeviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'MacBook',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.REVOKED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      // Should fail validation and cancel the task
       await expect(service.executeTaskWithValidation(task.taskId)).rejects.toThrow(
         'Device revoked before execution'
       );
@@ -214,33 +184,12 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should record audit trail when device revocation check fails', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockReturnValue({
-        deviceId: mockTargetDeviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'MacBook',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.REVOKED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      jest.spyOn(devicesService, 'findById').mockReturnValue(
+        createMockDevice(mockTargetDeviceId, TrustStatus.REVOKED)
+      );
 
       const auditSpy = jest.spyOn(auditService, 'recordCheck');
 
@@ -260,37 +209,11 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-4: Grant Revocation Recheck Before Execution', () => {
     it('should fail when source grant is revoked before execution', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      // Mock devices as trusted
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
-      // Mock source grant as revoked
-      jest.spyOn(grantsService, 'checkGrant').mockImplementation((userId, deviceId, resourceType, resourcePath) => {
+      setupTrustedDeviceMocks();
+      jest.spyOn(grantsService, 'checkGrant').mockImplementation((userId, deviceId) => {
         if (deviceId === mockSourceDeviceId) {
           return { granted: false, reason: 'Grant revoked' };
         }
@@ -307,36 +230,11 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should fail when target grant is revoked before execution', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
-      // Mock target grant as revoked
-      jest.spyOn(grantsService, 'checkGrant').mockImplementation((userId, deviceId, resourceType, resourcePath) => {
+      setupTrustedDeviceMocks();
+      jest.spyOn(grantsService, 'checkGrant').mockImplementation((userId, deviceId) => {
         if (deviceId === mockTargetDeviceId) {
           return { granted: false, reason: 'Grant revoked' };
         }
@@ -352,34 +250,10 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should record audit trail when grant check fails', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
+      setupTrustedDeviceMocks();
       jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
         granted: false,
         reason: 'Grant revoked',
@@ -402,34 +276,10 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-5: Grant Expiry Recheck Before Execution', () => {
     it('should fail when grant expires before execution', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
+      setupTrustedDeviceMocks();
       jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
         granted: false,
         reason: 'Grant expired',
@@ -447,16 +297,8 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-6: Cancel While Queued', () => {
     it('should allow canceling QUEUED task', () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {},
-      };
-
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
+      setupBasicMocks();
+      const task = service.createTask(mockUserId, createTransferTaskDto('', ''));
       expect(task.state).toBe(TaskState.QUEUED);
 
       const canceled = service.cancelTask(task.taskId, 'User canceled while queued');
@@ -468,39 +310,11 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-7: Happy Path with Validation', () => {
     it('should successfully execute when device is trusted and grants are valid', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      // Mock devices as trusted
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
-      // Mock grants as valid
-      jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
-        granted: true,
-      });
+      setupTrustedDeviceMocks();
+      setupValidGrantMocks();
 
       const executingTask = await service.executeTaskWithValidation(task.taskId);
 
@@ -508,37 +322,11 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should complete task after successful execution with valid grants', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
-      jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
-        granted: true,
-      });
+      setupTrustedDeviceMocks();
+      setupValidGrantMocks();
 
       const executingTask = await service.executeTaskWithValidation(task.taskId);
       const completedTask = service.completeTask(executingTask.taskId, {
@@ -555,33 +343,12 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
 
   describe('M6-8: Audit Trail for All Recheck Failures', () => {
     it('should record audit entry for device revocation failure', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockReturnValue({
-        deviceId: mockTargetDeviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'MacBook',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.REVOKED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      jest.spyOn(devicesService, 'findById').mockReturnValue(
+        createMockDevice(mockTargetDeviceId, TrustStatus.REVOKED)
+      );
 
       const auditSpy = jest.spyOn(auditService, 'recordCheck');
 
@@ -591,34 +358,10 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should record audit entry for grant check failure', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
+      setupTrustedDeviceMocks();
       jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
         granted: false,
         reason: 'Grant expired',
@@ -636,37 +379,11 @@ describe('TasksService (M6 Queued Expiry and Auth Recheck)', () => {
     });
 
     it('should record successful validation in audit trail', async () => {
-      const createTaskDto: CreateTaskDto = {
-        sourceDeviceId: mockSourceDeviceId,
-        targetDeviceId: mockTargetDeviceId,
-        actionType: ActionType.TRANSFER_FILE,
-        actionPayload: {
-          sourcePath: '/path/to/file.txt',
-          targetPath: '/destination/file.txt',
-        },
-      };
+      setupBasicMocks();
+      const task = createAndApproveTask(createTransferTaskDto());
 
-      jest.spyOn(validationService, 'validateTaskCreation').mockImplementation(() => {});
-
-      const task = service.createTask(mockUserId, createTaskDto);
-      service.approveTask(task.taskId, mockUserId);
-
-      jest.spyOn(devicesService, 'findById').mockImplementation((deviceId) => ({
-        deviceId,
-        userId: mockUserId,
-        platform: Platform.MACOS,
-        deviceName: 'Device',
-        publicKey: 'key',
-        capabilities: [],
-        lastSeen: new Date(),
-        trustStatus: TrustStatus.TRUSTED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-
-      jest.spyOn(grantsService, 'checkGrant').mockReturnValue({
-        granted: true,
-      });
+      setupTrustedDeviceMocks();
+      setupValidGrantMocks();
 
       const auditSpy = jest.spyOn(auditService, 'recordCheck');
 

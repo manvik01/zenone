@@ -22,33 +22,31 @@ export class IntentService {
       };
     }
 
-    if (lowerInput.includes('find') || lowerInput.includes('search')) {
+    if (lowerInput.includes('summarize') || lowerInput.includes('summary')) {
       return {
-        actionType: ActionType.FIND_FILE,
+        actionType: ActionType.SUMMARIZE,
         payload: {
-          query: this.extractQuery(userInput),
+          content: this.extractContent(userInput),
         },
         confidence: 0.7,
       };
     }
 
-    if (lowerInput.includes('open')) {
+    if (lowerInput.includes('list') && lowerInput.includes('device')) {
       return {
-        actionType: ActionType.OPEN_FILE,
-        payload: {
-          fileName: this.extractFileName(userInput),
-        },
-        confidence: 0.75,
+        actionType: ActionType.LIST_DEVICES,
+        payload: {},
+        confidence: 0.65,
       };
     }
 
-    if (lowerInput.includes('list')) {
+    if (lowerInput.includes('status') || lowerInput.includes('state')) {
       return {
-        actionType: ActionType.LIST_FILES,
+        actionType: ActionType.TASK_STATUS,
         payload: {
-          path: this.extractPath(userInput),
+          taskId: this.extractTaskId(userInput),
         },
-        confidence: 0.65,
+        confidence: 0.75,
       };
     }
 
@@ -60,13 +58,13 @@ export class IntentService {
     return match ? match[1] : 'unknown.txt';
   }
 
-  private extractQuery(input: string): string {
-    const match = input.match(/(?:find|search)\s+(?:for\s+)?['"]?([^'"]+)['"]?/i);
+  private extractContent(input: string): string {
+    const match = input.match(/(?:summarize|summary)\s+(?:of\s+)?['"]?([^'"]+)['"]?/i);
     return match ? match[1].trim() : '';
   }
 
-  private extractPath(input: string): string {
-    const match = input.match(/in\s+['"]?([^'"]+)['"]?/i);
-    return match ? match[1] : '/';
+  private extractTaskId(input: string): string {
+    const match = input.match(/(?:task|status)\s+['"]?([a-f0-9-]+)['"]?/i);
+    return match ? match[1] : '';
   }
 }

@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ZenControlController } from './zencontrol.controller';
 import { GrantsService } from './grants.service';
 import { AuditService } from './audit.service';
+import { JwtAuthGuard } from '../identity/jwt-auth.guard';
 import { ResourceType, Capability, AuditResult } from '../common/dto/zencontrol.dto';
 
 describe('ZenControlController', () => {
@@ -31,7 +32,10 @@ describe('ZenControlController', () => {
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ZenControlController>(ZenControlController);
     grantsService = module.get<GrantsService>(GrantsService);

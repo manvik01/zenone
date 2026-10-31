@@ -42,6 +42,7 @@ export class Device {
   capabilities: string[];
   lastSeen: Date;
   trustStatus: TrustStatus;
+  revokedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,5 +54,7 @@ export class DeviceResponseDto {
   capabilities: string[];
   lastSeen: Date;
   trustStatus: TrustStatus;
+  isOnline: boolean;
+  revokedAt?: Date;
   createdAt: Date;
 }

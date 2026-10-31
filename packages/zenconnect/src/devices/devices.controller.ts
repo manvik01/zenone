@@ -1,42 +1,57 @@
-import { Controller, Post, Get, Delete, Body, Param, Headers } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  Delete,
+  UseGuards,
+  Request,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { DevicesService } from './devices.service';
-import { PairDeviceStartDto, PairDeviceConfirmDto, DeviceResponseDto } from '../common/dto/device.dto';
+import {
+  PairDeviceStartDto,
+  PairDeviceConfirmDto,
+  DeviceResponseDto,
+} from '../common/dto/device.dto';
+import { JwtAuthGuard, RequestWithUser } from '../identity/jwt-auth.guard';
 
 @Controller('v1/devices')
+@UseGuards(JwtAuthGuard)
 export class DevicesController {
   constructor(private readonly devicesService: DevicesService) {}
 
   @Post('pair/start')
-  pairStart(
+  startPairing(
+    @Request() req: RequestWithUser,
     @Body() pairDto: PairDeviceStartDto,
-    @Headers('x-user-id') userId: string,
   ) {
-    return this.devicesService.startPairing(userId, pairDto);
+    return this.devicesService.startPairing(req.user!.userId, pairDto);
   }
 
-  @Post('pair/confirm')
-  pairConfirm(
-    @Body() confirmDto: PairDeviceConfirmDto & { deviceId: string },
-  ): DeviceResponseDto {
-    const device = this.devicesService.confirmPairing(
-      confirmDto.deviceId,
-      confirmDto.pairingCode,
-    );
+  @Post('pair/confirm/:deviceId')
+  confirmPairing(
+    @Request() req: RequestWithUser,
+    @Param('deviceId') deviceId: string,
+    @Body() confirmDto: PairDeviceConfirmDto,
+  ) {
+    const device = this.devicesService.findById(deviceId);
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
 
-    return {
-      deviceId: device.deviceId,
-      platform: device.platform,
-      deviceName: device.deviceName,
-      capabilities: device.capabilities,
-      lastSeen: device.lastSeen,
-      trustStatus: device.trustStatus,
-      createdAt: device.createdAt,
-    };
+    if (device.userId !== req.user!.userId) {
+      throw new ForbiddenException('Not authorized to confirm this device');
+    }
+
+    return this.devicesService.confirmPairing(deviceId, confirmDto.pairingCode);
   }
 
   @Get()
-  listDevices(@Headers('x-user-id') userId: string): DeviceResponseDto[] {
-    const devices = this.devicesService.findByUserId(userId);
+  listDevices(@Request() req: RequestWithUser): DeviceResponseDto[] {
+    const devices = this.devicesService.findByUserId(req.user!.userId);
     return devices.map((device) => ({
       deviceId: device.deviceId,
       platform: device.platform,
@@ -44,13 +59,26 @@ export class DevicesController {
       capabilities: device.capabilities,
       lastSeen: device.lastSeen,
       trustStatus: device.trustStatus,
+      isOnline: this.devicesService.isDeviceOnline(device.deviceId),
+      revokedAt: device.revokedAt,
       createdAt: device.createdAt,
     }));
   }
 
-  @Delete(':deviceId')
-  revokeDevice(@Param('deviceId') deviceId: string): DeviceResponseDto {
-    const device = this.devicesService.revokeDevice(deviceId);
+  @Get(':deviceId')
+  getDevice(
+    @Request() req: RequestWithUser,
+    @Param('deviceId') deviceId: string,
+  ): DeviceResponseDto {
+    const device = this.devicesService.findById(deviceId);
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
+
+    if (device.userId !== req.user!.userId) {
+      throw new ForbiddenException('Not authorized to access this device');
+    }
+
     return {
       deviceId: device.deviceId,
       platform: device.platform,
@@ -58,7 +86,49 @@ export class DevicesController {
       capabilities: device.capabilities,
       lastSeen: device.lastSeen,
       trustStatus: device.trustStatus,
+      isOnline: this.devicesService.isDeviceOnline(device.deviceId),
+      revokedAt: device.revokedAt,
       createdAt: device.createdAt,
     };
+  }
+
+  @Post(':deviceId/heartbeat')
+  updatePresence(
+    @Request() req: RequestWithUser,
+    @Param('deviceId') deviceId: string,
+  ) {
+    const device = this.devicesService.findById(deviceId);
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
+
+    if (device.userId !== req.user!.userId) {
+      throw new ForbiddenException('Not authorized to update this device');
+    }
+
+    const updatedDevice = this.devicesService.updatePresence(deviceId);
+
+    return {
+      deviceId: updatedDevice.deviceId,
+      lastSeen: updatedDevice.lastSeen,
+      isOnline: this.devicesService.isDeviceOnline(deviceId),
+    };
+  }
+
+  @Delete(':deviceId')
+  revokeDevice(
+    @Request() req: RequestWithUser,
+    @Param('deviceId') deviceId: string,
+  ) {
+    const device = this.devicesService.findById(deviceId);
+    if (!device) {
+      throw new NotFoundException('Device not found');
+    }
+
+    if (device.userId !== req.user!.userId) {
+      throw new ForbiddenException('Not authorized to revoke this device');
+    }
+
+    return this.devicesService.revokeDevice(deviceId);
   }
 }

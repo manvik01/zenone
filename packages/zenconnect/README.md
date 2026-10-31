@@ -1,8 +1,8 @@
-# ZenConnect - Identity & Session Management (M1)
+# ZenConnect - Identity & Device Management (M1 + M2)
 
 ## Overview
 
-ZenConnect M1 implements a secure identity system with email/password authentication, JWT-based session management, email verification, and password recovery.
+ZenConnect implements secure identity and device management for ZenOne, with email/password authentication, JWT-based session management, device pairing, presence tracking, and task validation.
 
 ## Features
 
@@ -15,6 +15,17 @@ ZenConnect M1 implements a secure identity system with email/password authentica
 - **Multi-Client Support**: Same account can be used from multiple devices simultaneously
 - **Password Recovery**: Password reset flow with 1-hour expiry tokens
 - **Session Management**: Session validation, refresh, and logout
+
+### Gate 2: Device Management (MVP-02) ✓
+
+- **Device Pairing**: Two-step pairing flow (start → confirm with 6-digit code, 5min expiry)
+- **Device Listing**: View all paired devices with metadata and real-time status
+- **Presence Tracking**: Accurate online/offline status (60s timeout, no false positives)
+- **Device Revocation**: Immediate revocation with revokedAt timestamp
+- **Task Execution Control**: Revoked devices CANNOT execute tasks (enforced before task creation)
+- **Capabilities Registry**: Track per-device capabilities (file_transfer, execute_tasks, etc.)
+- **Owner Authorization**: Only device owners can view, update, or revoke their devices
+
 
 ## API Endpoints
 
@@ -126,6 +137,143 @@ Reset password with token.
 }
 ```
 
+### Device Management (M2)
+
+#### `POST /v1/devices/pair/start`
+Initiate device pairing (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "deviceName": "My Android Phone",
+  "platform": "ANDROID",
+  "publicKey": "base64-encoded-public-key",
+  "capabilities": ["file_transfer", "execute_tasks"]
+}
+```
+
+**Response:**
+```json
+{
+  "deviceId": "device-uuid",
+  "pairingCode": "123456",
+  "expiresAt": "2026-10-31T00:05:00.000Z"
+}
+```
+
+**Note:** Pairing code expires in 5 minutes. Present it to the user for confirmation.
+
+#### `POST /v1/devices/pair/confirm/:deviceId`
+Complete device pairing with code (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request:**
+```json
+{
+  "pairingCode": "123456"
+}
+```
+
+**Response:**
+```json
+{
+  "deviceId": "device-uuid",
+  "userId": "user-uuid",
+  "platform": "ANDROID",
+  "deviceName": "My Android Phone",
+  "capabilities": ["file_transfer", "execute_tasks"],
+  "lastSeen": "2026-10-31T00:00:00.000Z",
+  "trustStatus": "TRUSTED",
+  "createdAt": "2026-10-31T00:00:00.000Z",
+  "updatedAt": "2026-10-31T00:00:00.000Z"
+}
+```
+
+#### `GET /v1/devices`
+List all devices for authenticated user.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+[
+  {
+    "deviceId": "device-uuid",
+    "platform": "ANDROID",
+    "deviceName": "My Android Phone",
+    "capabilities": ["file_transfer", "execute_tasks"],
+    "lastSeen": "2026-10-31T00:00:00.000Z",
+    "trustStatus": "TRUSTED",
+    "isOnline": true,
+    "createdAt": "2026-10-31T00:00:00.000Z"
+  }
+]
+```
+
+**Fields:**
+- `isOnline`: Device is online if `lastSeen` is within 60 seconds and not revoked
+- `trustStatus`: `PENDING`, `TRUSTED`, or `REVOKED`
+
+#### `GET /v1/devices/:deviceId`
+Get details for a specific device (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:** Same as device object in list response.
+
+#### `POST /v1/devices/:deviceId/heartbeat`
+Update device presence (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "deviceId": "device-uuid",
+  "lastSeen": "2026-10-31T00:00:00.000Z",
+  "isOnline": true
+}
+```
+
+**Usage:** Devices should send heartbeat every 30 seconds to maintain online status.
+
+#### `DELETE /v1/devices/:deviceId`
+Revoke a device (requires authentication, owner only).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response:**
+```json
+{
+  "deviceId": "device-uuid",
+  "trustStatus": "REVOKED",
+  "revokedAt": "2026-10-31T00:00:00.000Z"
+}
+```
+
+**Critical:** Revoked devices CANNOT execute tasks. Any attempt to create tasks with a revoked device will fail with a 400 error.
+
 ## Security Features
 
 ### NFRs Implemented
@@ -151,6 +299,16 @@ Reset password with token.
 - Email verification tokens: 24 hours
 - Password reset tokens: 1 hour
 - Tokens marked as used after consumption
+- Pairing codes: 5 minutes (M2)
+
+#### ✓ Device Security (M2)
+- All device endpoints require JWT authentication
+- Device ownership enforced: users can only access their own devices
+- Pairing codes expire in 5 minutes
+- Trust status validation: PENDING → TRUSTED → (optional) REVOKED
+- Immediate revocation enforcement: revoked devices blocked from task execution
+- Presence timeout: 60 seconds (prevents false online status)
+- Device capabilities registry for future task routing
 
 #### ✓ Encrypted Transport
 **Production Requirements:**
@@ -187,36 +345,41 @@ server {
 ## Architecture
 
 ### Storage
-- **Prototype**: In-memory storage for users, sessions, and verification tokens
+- **Prototype**: In-memory storage for users, sessions, verification tokens, and devices
 - **Production Ready**: Designed for later migration to PostgreSQL/Redis
   - User data → PostgreSQL
   - Sessions → Redis with TTL
   - Verification tokens → Redis with TTL
+  - Devices → PostgreSQL with indexes on userId and trustStatus
 
 ### Technology Stack
 - NestJS 10.x
 - JWT (jsonwebtoken via @nestjs/jwt)
 - bcrypt for password hashing
 - TypeScript with strict type checking
-- Jest for testing (72 test cases)
+- Jest for testing (119 test cases)
 
 ## Testing
 
 Run the test suite:
 
 ```bash
-npm test                  # Run all tests
+npm test                  # Run all tests (119 passing)
 npm test:watch           # Watch mode
 npm test:cov             # With coverage
+npm run typecheck        # TypeScript type checking
 ```
 
-**Test Coverage:**
-- ✓ 17 tests for IdentityService
-- ✓ 15 tests for SessionService
-- ✓ 20 tests for VerificationService
-- ✓ 20 integration tests for IdentityController
+**Test Coverage (M1 + M2):**
+- ✓ 17 tests for IdentityService (registration, validation, verification)
+- ✓ 15 tests for SessionService (JWT sessions, refresh, revoke)
+- ✓ 20 tests for VerificationService (email verification, password reset)
+- ✓ 20 tests for IdentityController (integration tests)
+- ✓ 29 tests for DevicesService (pairing, listing, presence, revocation)
+- ✓ 15 tests for DevicesController (integration tests with JWT auth)
+- ✓ 13 tests for TaskValidationService (revoked device enforcement)
 
-All tests follow TDD principles - written before implementation.
+All tests follow strict TDD - written before implementation.
 
 ## Development
 
@@ -253,12 +416,13 @@ The system supports multiple simultaneous sessions:
 
 Example: User logs in from laptop and phone simultaneously - both devices get valid, independent sessions.
 
-## Next Steps (M2)
+## Implementation Status
 
-- Device management module
-- Device registration and capabilities
-- Device revocation
-- Presence tracking
+- ✅ **M1 (Identity)**: Complete - JWT auth, email verification, password recovery
+- ✅ **M2 (Device Management)**: Complete - Pairing, presence, revocation, task validation
+- 🔜 **M3-M4**: Task orchestration, typed actions, approval flow
+- 🔜 **M5**: File transfer coordination with checksums
+- 🔜 **M6-M8**: AI intent routing, context sync, full integration
 
 ## Scope Lock
 

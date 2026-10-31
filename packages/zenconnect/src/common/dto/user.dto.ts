@@ -20,6 +20,7 @@ export class User {
   email: string;
   passwordHash: string;
   accountStatus: AccountStatus;
+  emailVerified: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -28,5 +29,6 @@ export class UserResponseDto {
   userId: string;
   email: string;
   accountStatus: AccountStatus;
+  emailVerified: boolean;
   createdAt: Date;
 }

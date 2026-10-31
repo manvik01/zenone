@@ -1,229 +1,272 @@
-# ZenConnect
+# ZenConnect - Identity & Session Management (M1)
 
-> Cloud orchestration layer for ZenOne cross-device AI assistant - Prototype v0.0.2
+## Overview
 
-ZenConnect provides device registration, task routing, encrypted relay, and AI intent orchestration for the ZenOne ecosystem.
+ZenConnect M1 implements a secure identity system with email/password authentication, JWT-based session management, email verification, and password recovery.
 
-## Status
+## Features
 
-**Prototype scaffold** — Core modules and endpoints stubbed with in-memory data stores. Ready for local development and iteration.
+### Gate 1: Identity (MVP-01/FR-01) ✓
+
+- **Email Registration**: Users register with email and password
+- **Email Verification**: Email verification tokens with 24-hour expiry
+- **Authentication**: Secure login with bcrypt password hashing
+- **JWT Sessions**: Real JWT tokens (access + refresh) for authentication
+- **Multi-Client Support**: Same account can be used from multiple devices simultaneously
+- **Password Recovery**: Password reset flow with 1-hour expiry tokens
+- **Session Management**: Session validation, refresh, and logout
+
+## API Endpoints
+
+### Authentication
+
+#### `POST /v1/auth/register`
+Register a new user account.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+```json
+{
+  "userId": "uuid",
+  "email": "user@example.com",
+  "accountStatus": "ACTIVE",
+  "emailVerified": false,
+  "createdAt": "2026-10-31T00:00:00.000Z",
+  "verificationToken": "ev_token"
+}
+```
+
+#### `POST /v1/auth/verify-email`
+Verify email address with token.
+
+**Request:**
+```json
+{
+  "token": "ev_token_from_registration"
+}
+```
+
+#### `POST /v1/auth/login`
+Authenticate and create a session.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response:**
+```json
+{
+  "accessToken": "jwt_access_token",
+  "refreshToken": "jwt_refresh_token",
+  "userId": "uuid",
+  "email": "user@example.com",
+  "expiresIn": 900
+}
+```
+
+#### `POST /v1/auth/refresh`
+Refresh session with refresh token.
+
+**Request:**
+```json
+{
+  "refreshToken": "jwt_refresh_token"
+}
+```
+
+#### `POST /v1/auth/logout`
+Revoke current session (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+#### `GET /v1/auth/me`
+Get current user information (requires authentication).
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+### Password Recovery
+
+#### `POST /v1/auth/request-password-reset`
+Request password reset token.
+
+**Request:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Note:** Always returns success (security - doesn't reveal if email exists)
+
+#### `POST /v1/auth/reset-password`
+Reset password with token.
+
+**Request:**
+```json
+{
+  "token": "pr_token_from_email",
+  "newPassword": "NewSecurePass456!"
+}
+```
+
+## Security Features
+
+### NFRs Implemented
+
+#### ✓ Least Privilege Principle
+- Sessions are scoped to individual users
+- Token validation ensures user existence
+- Revoked sessions cannot be used
+
+#### ✓ Password Security
+- Passwords hashed with bcrypt (salt rounds: 10)
+- Minimum password length: 8 characters
+- No plaintext passwords stored
+
+#### ✓ Session Security
+- JWT tokens with HMAC-SHA256 signing
+- Access tokens expire in 15 minutes
+- Refresh tokens expire in 7 days
+- Session revocation support
+- Multiple concurrent sessions per user
+
+#### ✓ Token Expiry
+- Email verification tokens: 24 hours
+- Password reset tokens: 1 hour
+- Tokens marked as used after consumption
+
+#### ✓ Encrypted Transport
+**Production Requirements:**
+- TLS 1.2+ required for all API endpoints
+- HTTPS only - no plain HTTP
+- Set `NODE_ENV=production` and configure reverse proxy (nginx/Caddy) with TLS certificates
+
+**Development:**
+- Currently HTTP for local development
+- JWT secret configurable via `JWT_SECRET` environment variable
+- Default dev secret: `zenone-dev-secret-change-in-production`
+
+**TLS Configuration Example (nginx):**
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name api.zenone.example.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 ## Architecture
 
-ZenConnect implements the backend stack decision (ADR-002): **TypeScript / NestJS**.
+### Storage
+- **Prototype**: In-memory storage for users, sessions, and verification tokens
+- **Production Ready**: Designed for later migration to PostgreSQL/Redis
+  - User data → PostgreSQL
+  - Sessions → Redis with TTL
+  - Verification tokens → Redis with TTL
 
-### Modules
+### Technology Stack
+- NestJS 10.x
+- JWT (jsonwebtoken via @nestjs/jwt)
+- bcrypt for password hashing
+- TypeScript with strict type checking
+- Jest for testing (72 test cases)
 
-| Module | Responsibility | Endpoints |
-|---|---|---|
-| **Gateway** | Health checks, API root | `GET /health`, `GET /` |
-| **Identity** | User registration, authentication (email+password prototype) | `POST /v1/auth/register`, `POST /v1/auth/login` |
-| **Devices** | Device pairing, trust management | `POST /v1/devices/pair/start`, `POST /v1/devices/pair/confirm`, `GET /v1/devices`, `DELETE /v1/devices/:id` |
-| **Tasks** | Task orchestration, lifecycle management | `POST /v1/tasks`, `GET /v1/tasks/:id`, `POST /v1/tasks/:id/approve`, `POST /v1/tasks/:id/cancel` |
-| **Intent** | AI intent parsing (stub — no live LLM) | `POST /v1/intent/parse` |
-| **Transfers** | File transfer coordination (stub) | `POST /v1/transfers`, `GET /v1/transfers/:id`, `POST /v1/transfers/:id/verify` |
+## Testing
 
-### Data Model
-
-All entities stored in-memory for rapid prototyping:
-
-- **User**: email, passwordHash (bcrypt), accountStatus
-- **Device**: platform, deviceName, publicKey, capabilities, trustStatus
-- **Task**: requesterDevice, executorDevice, actionType, payload, status, idempotencyKey
-- **Transfer**: taskId, sourceDevice, destinationDevice, fileDigest, byteCount, status
-
-See TDD entity definitions in `/workspace/docs/03-tdd.md` §4.
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- No database required (in-memory stores)
-
-### Installation
+Run the test suite:
 
 ```bash
-cd packages/zenconnect
-npm install
+npm test                  # Run all tests
+npm test:watch           # Watch mode
+npm test:cov             # With coverage
 ```
 
-### Configuration
+**Test Coverage:**
+- ✓ 17 tests for IdentityService
+- ✓ 15 tests for SessionService
+- ✓ 20 tests for VerificationService
+- ✓ 20 integration tests for IdentityController
 
-Copy `.env.example` to `.env` and adjust if needed:
+All tests follow TDD principles - written before implementation.
+
+## Development
+
+### Environment Variables
 
 ```bash
-cp .env.example .env
+# Required for production
+JWT_SECRET=your-secret-key-min-32-characters
+
+# Optional
+NODE_ENV=production
+PORT=3000
 ```
 
-Default configuration runs on `http://localhost:3000`.
-
-### Running the Prototype
-
-**Development mode** (with auto-reload):
+### Running
 
 ```bash
+# Development
 npm run start:dev
-```
 
-**Production build**:
-
-```bash
+# Production
 npm run build
 npm start
 ```
 
-**Type checking**:
+## Multi-Client Support
 
-```bash
-npm run typecheck
-```
+The system supports multiple simultaneous sessions:
+- Each login creates a new session
+- Sessions are independent
+- Each device gets unique JWT tokens
+- Logout only revokes the current session
+- All user sessions can be revoked if needed
 
-### Verify Setup
+Example: User logs in from laptop and phone simultaneously - both devices get valid, independent sessions.
 
-Once running, check the health endpoint:
+## Next Steps (M2)
 
-```bash
-curl http://localhost:3000/health
-```
+- Device management module
+- Device registration and capabilities
+- Device revocation
+- Presence tracking
 
-Expected response:
+## Scope Lock
 
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-10-31T01:38:00.000Z",
-  "service": "zenconnect",
-  "version": "0.0.2"
-}
-```
-
-## Example API Flows
-
-### 1. Register a User
-
-```bash
-curl -X POST http://localhost:3000/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123"
-  }'
-```
-
-### 2. Login
-
-```bash
-curl -X POST http://localhost:3000/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123"
-  }'
-```
-
-### 3. Pair a Device (Start)
-
-```bash
-curl -X POST http://localhost:3000/v1/devices/pair/start \
-  -H "Content-Type: application/json" \
-  -H "x-user-id: <userId-from-login>" \
-  -d '{
-    "deviceName": "My Android Phone",
-    "platform": "ANDROID",
-    "publicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
-    "capabilities": ["file_read", "file_write", "file_transfer"]
-  }'
-```
-
-Returns: `{ "deviceId": "...", "pairingCode": "123456", "expiresAt": "..." }`
-
-### 4. Pair a Device (Confirm)
-
-```bash
-curl -X POST http://localhost:3000/v1/devices/pair/confirm \
-  -H "Content-Type: application/json" \
-  -d '{
-    "deviceId": "<deviceId-from-start>",
-    "pairingCode": "123456"
-  }'
-```
-
-### 5. Create a Task
-
-```bash
-curl -X POST http://localhost:3000/v1/tasks \
-  -H "Content-Type: application/json" \
-  -H "x-device-id: <requesterDeviceId>" \
-  -d '{
-    "executorDeviceId": "<targetDeviceId>",
-    "actionType": "TRANSFER_FILE",
-    "payload": {
-      "fileName": "report.pdf",
-      "sourcePath": "/documents/report.pdf"
-    }
-  }'
-```
-
-### 6. Parse Intent (Stub)
-
-```bash
-curl -X POST http://localhost:3000/v1/intent/parse \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userInput": "Send report.pdf from my laptop"
-  }'
-```
-
-## Implementation Notes
-
-### Authentication
-
-- **Prototype only**: Email + password with bcrypt hashing (ADR-001)
-- No JWT implementation yet — user auth is stubbed with headers (`x-user-id`, `x-device-id`)
-- **Production upgrade path**: Replace with OIDC + passkeys behind the identity service interface
-
-### ZenControl Boundary
-
-- Currently implemented as logical separation within services (not a separate module yet)
-- Decision deferred per ADR-003 — boundaries clearly defined for future extraction
-
-### Data Persistence
-
-- **Current**: In-memory maps (data lost on restart)
-- **Next step**: Add TypeORM or Prisma with PostgreSQL
-- **Migration path**: Replace service storage with repository pattern; DTOs remain unchanged
-
-### AI Intent Router
-
-- **Current**: Simple pattern matching stub
-- **Next step**: Integrate OpenAI, Anthropic, or local LLM via provider-agnostic adapter
-- Intent parsing interface is stable for swapping implementations
-
-## What's Next
-
-According to the prototype plan (`/workspace/docs/05-prototype-plan.md`):
-
-1. ✅ Scaffold NestJS backend with core modules
-2. 🔜 Add real authentication (JWT tokens, session management)
-3. 🔜 Implement permission checking (folder grants, audit events)
-4. 🔜 Build Android and/or Windows client prototypes
-5. 🔜 Add database persistence (PostgreSQL + Redis)
-6. 🔜 Integrate live AI model for intent parsing
-7. 🔜 Implement encrypted file relay
-
-## Documentation
-
-See the full documentation pack in `/workspace/docs/`:
-
-- [00-overview.md](../../docs/00-overview.md) — Vision and architecture
-- [01-prd.md](../../docs/01-prd.md) — Product requirements
-- [02-mvp.md](../../docs/02-mvp.md) — MVP scope
-- [03-tdd.md](../../docs/03-tdd.md) — Technical design document
-- [04-decisions.md](../../docs/04-decisions.md) — Architecture decisions (updated with locked choices)
-- [05-prototype-plan.md](../../docs/05-prototype-plan.md) — Prototype scope and decision status
-- [06-api-sketch.md](../../docs/06-api-sketch.md) — API examples
-- [07-security.md](../../docs/07-security.md) — Security model
+**Excluded features (per acceptance gates):**
+- OAuth/Social login
+- iOS/macOS native clients (M1 scope)
+- 3P integrations
+- Enterprise features
 
 ## License
 

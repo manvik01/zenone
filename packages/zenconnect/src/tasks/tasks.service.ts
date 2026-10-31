@@ -2,13 +2,23 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { Task, TaskState, CreateTaskDto, ActionType } from '../common/dto/task.dto';
 import { TaskValidationService } from './task-validation.service';
+import { DevicesService } from '../devices/devices.service';
+import { GrantsService } from '../zencontrol/grants.service';
+import { AuditService } from '../zencontrol/audit.service';
+import { TrustStatus } from '../common/dto/device.dto';
+import { ResourceType, Capability, AuditResult } from '../common/dto/zencontrol.dto';
 
 @Injectable()
 export class TasksService {
   private tasks: Map<string, Task> = new Map();
   private readonly DEFAULT_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-  constructor(private readonly taskValidationService: TaskValidationService) {}
+  constructor(
+    private readonly taskValidationService: TaskValidationService,
+    private readonly devicesService: DevicesService,
+    private readonly grantsService: GrantsService,
+    private readonly auditService: AuditService,
+  ) {}
 
   createTask(userId: string, createTaskDto: CreateTaskDto): Task {
     // Validate both source and target devices
@@ -133,6 +143,154 @@ export class TasksService {
     return task;
   }
 
+  async executeTaskWithValidation(taskId: string): Promise<Task> {
+    const task = this.findById(taskId);
+    if (!task) {
+      throw new BadRequestException('Task not found');
+    }
+
+    // M6: Pre-execution validation
+    try {
+      await this.validatePreExecution(task);
+      
+      // Record successful validation in audit
+      this.auditService.recordCheck({
+        userId: task.userId,
+        deviceId: task.targetDeviceId,
+        action: 'pre_execution_validation',
+        resourceType: ResourceType.FILE_PATH,
+        resourcePath: task.actionPayload.targetPath || 'unknown',
+        capability: Capability.TRANSFER,
+        result: AuditResult.GRANTED,
+      });
+
+      // Proceed with execution
+      return this.executeTask(taskId);
+    } catch (error) {
+      // Validation failed - fail the task
+      const reason = error instanceof Error ? error.message : 'Pre-execution validation failed';
+      this.failTask(taskId, reason);
+      throw error;
+    }
+  }
+
+  private async validatePreExecution(task: Task): Promise<void> {
+    // Check target device trust status
+    const targetDevice = this.devicesService.findById(task.targetDeviceId);
+    if (!targetDevice) {
+      const reason = 'Target device not found';
+      this.auditService.recordCheck({
+        userId: task.userId,
+        deviceId: task.targetDeviceId,
+        action: 'pre_execution_validation',
+        resourceType: ResourceType.FILE_PATH,
+        resourcePath: task.actionPayload.targetPath || 'unknown',
+        capability: Capability.TRANSFER,
+        result: AuditResult.DENIED,
+        reason,
+      });
+      throw new BadRequestException(reason);
+    }
+
+    if (targetDevice.trustStatus === TrustStatus.REVOKED) {
+      const reason = 'Device revoked before execution';
+      this.auditService.recordCheck({
+        userId: task.userId,
+        deviceId: task.targetDeviceId,
+        action: 'pre_execution_validation',
+        resourceType: ResourceType.FILE_PATH,
+        resourcePath: task.actionPayload.targetPath || 'unknown',
+        capability: Capability.TRANSFER,
+        result: AuditResult.DENIED,
+        reason,
+      });
+      throw new BadRequestException(reason);
+    }
+
+    // Check source device trust status
+    const sourceDevice = this.devicesService.findById(task.sourceDeviceId);
+    if (!sourceDevice) {
+      const reason = 'Source device not found';
+      this.auditService.recordCheck({
+        userId: task.userId,
+        deviceId: task.sourceDeviceId,
+        action: 'pre_execution_validation',
+        resourceType: ResourceType.FILE_PATH,
+        resourcePath: task.actionPayload.sourcePath || 'unknown',
+        capability: Capability.TRANSFER,
+        result: AuditResult.DENIED,
+        reason,
+      });
+      throw new BadRequestException(reason);
+    }
+
+    if (sourceDevice.trustStatus === TrustStatus.REVOKED) {
+      const reason = 'Source device revoked before execution';
+      this.auditService.recordCheck({
+        userId: task.userId,
+        deviceId: task.sourceDeviceId,
+        action: 'pre_execution_validation',
+        resourceType: ResourceType.FILE_PATH,
+        resourcePath: task.actionPayload.sourcePath || 'unknown',
+        capability: Capability.TRANSFER,
+        result: AuditResult.DENIED,
+        reason,
+      });
+      throw new BadRequestException(reason);
+    }
+
+    // M6: Recheck grants for transfer_file tasks
+    if (task.actionType === ActionType.TRANSFER_FILE) {
+      // Check source grant
+      const sourceGrant = this.grantsService.checkGrant(
+        task.userId,
+        task.sourceDeviceId,
+        ResourceType.FILE_PATH,
+        task.actionPayload.sourcePath,
+        Capability.TRANSFER,
+      );
+
+      if (!sourceGrant.granted) {
+        const reason = `Grant revoked/expired before execution: ${sourceGrant.reason}`;
+        this.auditService.recordCheck({
+          userId: task.userId,
+          deviceId: task.sourceDeviceId,
+          action: 'pre_execution_validation',
+          resourceType: ResourceType.FILE_PATH,
+          resourcePath: task.actionPayload.sourcePath,
+          capability: Capability.TRANSFER,
+          result: AuditResult.DENIED,
+          reason,
+        });
+        throw new BadRequestException(reason);
+      }
+
+      // Check target grant
+      const targetGrant = this.grantsService.checkGrant(
+        task.userId,
+        task.targetDeviceId,
+        ResourceType.FILE_PATH,
+        task.actionPayload.targetPath,
+        Capability.TRANSFER,
+      );
+
+      if (!targetGrant.granted) {
+        const reason = `Grant revoked/expired before execution: ${targetGrant.reason}`;
+        this.auditService.recordCheck({
+          userId: task.userId,
+          deviceId: task.targetDeviceId,
+          action: 'pre_execution_validation',
+          resourceType: ResourceType.FILE_PATH,
+          resourcePath: task.actionPayload.targetPath,
+          capability: Capability.TRANSFER,
+          result: AuditResult.DENIED,
+          reason,
+        });
+        throw new BadRequestException(reason);
+      }
+    }
+  }
+
   completeTask(taskId: string, result: any): Task {
     const task = this.findById(taskId);
     if (!task) {
@@ -208,7 +366,7 @@ export class TasksService {
   private validateStateTransition(currentState: TaskState, nextState: TaskState): void {
     const validTransitions: Record<TaskState, TaskState[]> = {
       [TaskState.QUEUED]: [TaskState.APPROVED, TaskState.CANCELED, TaskState.EXPIRED],
-      [TaskState.APPROVED]: [TaskState.EXECUTING, TaskState.CANCELED],
+      [TaskState.APPROVED]: [TaskState.EXECUTING, TaskState.CANCELED, TaskState.FAILED],
       [TaskState.EXECUTING]: [TaskState.SUCCEEDED, TaskState.FAILED],
       [TaskState.SUCCEEDED]: [],
       [TaskState.FAILED]: [],

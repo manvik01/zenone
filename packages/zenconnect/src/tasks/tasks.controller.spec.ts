@@ -5,6 +5,8 @@ import { TasksService } from './tasks.service';
 import { TaskValidationService } from './task-validation.service';
 import { TransferExecutionService } from '../transfers/transfer-execution.service';
 import { DevicesService } from '../devices/devices.service';
+import { GrantsService } from '../zencontrol/grants.service';
+import { AuditService } from '../zencontrol/audit.service';
 import { ActionType, TaskState, CreateTaskDto } from '../common/dto/task.dto';
 import { RequestWithUser } from '../identity/jwt-auth.guard';
 import { ExecutionContext } from '@nestjs/common';
@@ -42,6 +44,18 @@ describe('TasksController (M4 State Machine)', () => {
           provide: TransferExecutionService,
           useValue: {
             executeTransfer: jest.fn(),
+          },
+        },
+        {
+          provide: GrantsService,
+          useValue: {
+            checkGrant: jest.fn(),
+          },
+        },
+        {
+          provide: AuditService,
+          useValue: {
+            recordCheck: jest.fn(),
           },
         },
       ],

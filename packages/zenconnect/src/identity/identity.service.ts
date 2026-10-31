@@ -21,6 +21,7 @@ export class IdentityService {
       email: createUserDto.email,
       passwordHash,
       accountStatus: AccountStatus.ACTIVE,
+      emailVerified: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -60,5 +61,28 @@ export class IdentityService {
       return null;
     }
     return this.users.get(userId) || null;
+  }
+
+  async verifyEmail(userId: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    user.emailVerified = true;
+    user.updatedAt = new Date();
+    this.users.set(userId, user);
+  }
+
+  async updatePassword(userId: string, newPassword: string): Promise<void> {
+    const user = this.users.get(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = passwordHash;
+    user.updatedAt = new Date();
+    this.users.set(userId, user);
   }
 }

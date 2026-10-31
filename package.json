@@ -1,0 +1,25 @@
+{
+  "name": "zenone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZenOne - Zero-trust device control system",
+  "scripts": {
+    "build": "cd apps/zenconnect && npm run build",
+    "test": "cd apps/zenconnect && npm test",
+    "test:watch": "cd apps/zenconnect && npm run test:watch",
+    "test:cov": "cd apps/zenconnect && npm run test:cov",
+    "lint": "cd apps/zenconnect && npm run lint",
+    "format": "cd apps/zenconnect && npm run format",
+    "start:dev": "cd apps/zenconnect && npm run start:dev"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/manvik01/zenone"
+  },
+  "author": "",
+  "license": "UNLICENSED"
+}

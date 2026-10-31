@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { log, success, section, wait } from './cli-helpers';
+import { log, success, section, wait, sanitizeLog } from './cli-helpers';
 import { 
   setupUserAndDevices, 
   createGrants, 
@@ -51,7 +51,7 @@ async function runExpiryDemo(): Promise<void> {
       const status = await client.getTaskStatus(task.taskId);
       currentState = status.state;
       
-      console.log(`  [${attempts * 5}s] Current state: ${currentState}`);
+      console.log(`  [${attempts * 5}s] Current state: ${sanitizeLog(currentState)}`);
       
       if (currentState === 'EXPIRED') {
         success('Task has expired!');
@@ -68,11 +68,11 @@ async function runExpiryDemo(): Promise<void> {
     section('Final Task State');
     const finalTask = await client.getTask(task.taskId);
     console.log(chalk.white('Task details:'));
-    console.log(`  Task ID: ${finalTask.taskId}`);
-    console.log(`  State: ${finalTask.state}`);
-    console.log(`  Created: ${finalTask.createdAt}`);
-    console.log(`  Expires: ${finalTask.expiresAt}`);
-    console.log(`  Updated: ${finalTask.updatedAt}`);
+    console.log(`  Task ID: ${sanitizeLog(finalTask.taskId)}`);
+    console.log(`  State: ${sanitizeLog(finalTask.state)}`);
+    console.log(`  Created: ${sanitizeLog(String(finalTask.createdAt))}`);
+    console.log(`  Expires: ${sanitizeLog(String(finalTask.expiresAt))}`);
+    console.log(`  Updated: ${sanitizeLog(String(finalTask.updatedAt))}`);
 
     section('✅ Expiry Demo Complete');
     console.log(chalk.green.bold('\nExpiry scenario demonstrated!\n'));

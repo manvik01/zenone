@@ -1,12 +1,9 @@
 #!/usr/bin/env ts-node
 
 import { ZenClient } from './zen-client';
-import { log, success, section, sanitizeToken } from './cli-helpers';
+import { log, success, section, sanitizeToken, sanitizeLog } from './cli-helpers';
 import { 
-  setupUserAndDevices, 
-  createGrants, 
   generateTestContent,
-  createAndApproveTask,
   displayTaskResult 
 } from './demo-helpers';
 import chalk from 'chalk';
@@ -65,7 +62,7 @@ async function runHappyPath(): Promise<void> {
     const devices = await clientA.listDevices();
     success(`Found ${devices.length} devices:`);
     devices.forEach(d => {
-      console.log(`  - ${d.deviceName} (${d.platform}): ${d.trustStatus}, Online: ${d.isOnline}`);
+      console.log(`  - ${sanitizeLog(d.deviceName)} (${sanitizeLog(d.platform)}): ${sanitizeLog(d.trustStatus)}, Online: ${d.isOnline}`);
     });
 
     section('Step 6: Create Grants for Device A');
@@ -73,7 +70,7 @@ async function runHappyPath(): Promise<void> {
     const sourceGrant = await clientA.createGrant(
       deviceA.deviceId,
       'file_path',
-      '/tmp/source.txt',
+      'memory://source.txt',
       ['transfer']
     );
     success(`Source grant created: ${sourceGrant.grantId}`);
@@ -82,7 +79,7 @@ async function runHappyPath(): Promise<void> {
     const targetGrant = await clientA.createGrant(
       deviceB.deviceId,
       'file_path',
-      '/tmp/dest.txt',
+      'memory://dest.txt',
       ['transfer']
     );
     success(`Target grant created: ${targetGrant.grantId}`);
@@ -92,7 +89,7 @@ async function runHappyPath(): Promise<void> {
     const grants = await clientA.listGrants();
     success(`Found ${grants.length} grants:`);
     grants.forEach(g => {
-      console.log(`  - ${g.deviceId}: ${g.resourcePath} [${g.capabilities.join(', ')}]`);
+      console.log(`  - ${sanitizeLog(g.deviceId)}: ${sanitizeLog(g.resourcePath)} [${g.capabilities.map(c => sanitizeLog(c)).join(', ')}]`);
     });
 
     section('Step 8: Create Transfer File Task');
@@ -104,16 +101,16 @@ async function runHappyPath(): Promise<void> {
       deviceB.deviceId,
       'transfer_file',
       {
-        sourcePath: '/tmp/source.txt',
-        targetPath: '/tmp/dest.txt',
+        sourcePath: 'memory://source.txt',
+        targetPath: 'memory://dest.txt',
         expectedDigest: testData.digest,
         expectedByteCount: testData.byteCount,
       }
     );
     success(`Task created: ${task.taskId}, State: ${task.state}`);
-    console.log(`  Source: ${task.actionPayload.sourcePath}`);
-    console.log(`  Target: ${task.actionPayload.targetPath}`);
-    console.log(`  Expected digest: ${testData.digest}`);
+    console.log(`  Source: ${sanitizeLog(task.actionPayload.sourcePath)}`);
+    console.log(`  Target: ${sanitizeLog(task.actionPayload.targetPath)}`);
+    console.log(`  Expected digest: ${sanitizeLog(testData.digest)}`);
     console.log(`  Expected bytes: ${testData.byteCount}`);
 
     section('Step 9: Approve Task');
@@ -141,7 +138,7 @@ async function runHappyPath(): Promise<void> {
     const tasks = await clientA.listTasks();
     success(`Found ${tasks.length} tasks:`);
     tasks.forEach(t => {
-      console.log(`  - ${t.taskId}: ${t.actionType} (${t.state})`);
+      console.log(`  - ${sanitizeLog(t.taskId)}: ${sanitizeLog(t.actionType)} (${sanitizeLog(t.state)})`);
     });
 
     section('✅ Happy Path Demo Complete!');

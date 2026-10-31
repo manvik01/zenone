@@ -1,6 +1,6 @@
 #!/usr/bin/env ts-node
 
-import { log, success, info, section } from './cli-helpers';
+import { log, success, info, section, sanitizeLog } from './cli-helpers';
 import { 
   setupUserAndDevices, 
   createGrants, 
@@ -23,7 +23,7 @@ async function runRevokeDemo(): Promise<void> {
     const devicesBefore = await client.listDevices();
     console.log(chalk.white('Active devices:'));
     devicesBefore.forEach(d => {
-      console.log(`  - ${d.deviceName} (${d.platform}): ${d.trustStatus}`);
+      console.log(`  - ${sanitizeLog(d.deviceName)} (${sanitizeLog(d.platform)}): ${sanitizeLog(d.trustStatus)}`);
     });
 
     section('Test 1: Create Task Before Revocation');
@@ -35,8 +35,8 @@ async function runRevokeDemo(): Promise<void> {
       deviceBId,
       'transfer_file',
       {
-        sourcePath: '/tmp/source.txt',
-        targetPath: '/tmp/dest.txt',
+        sourcePath: 'memory://source.txt',
+        targetPath: 'memory://dest.txt',
         expectedDigest: testData.digest,
         expectedByteCount: testData.byteCount,
       }
@@ -52,10 +52,10 @@ async function runRevokeDemo(): Promise<void> {
     const devicesAfter = await client.listDevices();
     console.log(chalk.white('Current devices:'));
     devicesAfter.forEach(d => {
-      const status = d.revokedAt ? chalk.red('REVOKED') : chalk.green(d.trustStatus);
-      console.log(`  - ${d.deviceName} (${d.platform}): ${status}`);
+      const status = d.revokedAt ? chalk.red('REVOKED') : chalk.green(sanitizeLog(d.trustStatus));
+      console.log(`  - ${sanitizeLog(d.deviceName)} (${sanitizeLog(d.platform)}): ${status}`);
       if (d.revokedAt) {
-        console.log(`    Revoked at: ${d.revokedAt}`);
+        console.log(`    Revoked at: ${sanitizeLog(String(d.revokedAt))}`);
       }
     });
 
@@ -67,19 +67,19 @@ async function runRevokeDemo(): Promise<void> {
         deviceBId,
         'transfer_file',
         {
-          sourcePath: '/tmp/source.txt',
-          targetPath: '/tmp/dest.txt',
+          sourcePath: 'memory://source.txt',
+          targetPath: 'memory://dest.txt',
           expectedDigest: testData.digest,
           expectedByteCount: testData.byteCount,
         }
       );
       console.error(chalk.red('✗ UNEXPECTED: Task was created with revoked device!'));
     } catch (err: any) {
-      if (err.response && err.response.status === 400) {
+      if (err.response?.status === 400) {
         success('Task creation correctly rejected!');
-        console.log(`  Error message: ${err.response.data.message}`);
+        console.log(`  Error message: ${sanitizeLog(err.response.data.message)}`);
       } else {
-        console.error(chalk.red(`✗ Unexpected error: ${err.message}`));
+        console.error(chalk.red(`✗ Unexpected error: ${sanitizeLog(err.message)}`));
       }
     }
 
@@ -91,19 +91,19 @@ async function runRevokeDemo(): Promise<void> {
         deviceAId,
         'transfer_file',
         {
-          sourcePath: '/tmp/source-b.txt',
-          targetPath: '/tmp/dest-a.txt',
+          sourcePath: 'memory://source-b.txt',
+          targetPath: 'memory://dest-a.txt',
           expectedDigest: testData.digest,
           expectedByteCount: testData.byteCount,
         }
       );
       console.error(chalk.red('✗ UNEXPECTED: Task was created with revoked source device!'));
     } catch (err: any) {
-      if (err.response && err.response.status === 400) {
+      if (err.response?.status === 400) {
         success('Task creation correctly rejected!');
-        console.log(`  Error message: ${err.response.data.message}`);
+        console.log(`  Error message: ${sanitizeLog(err.response.data.message)}`);
       } else {
-        console.error(chalk.red(`✗ Unexpected error: ${err.message}`));
+        console.error(chalk.red(`✗ Unexpected error: ${sanitizeLog(err.message)}`));
       }
     }
 

@@ -1,6 +1,6 @@
 import { ZenClient } from './zen-client';
-import { log, success, section, sanitizeToken } from './cli-helpers';
-import * as crypto from 'crypto';
+import { log, success, section, sanitizeToken, sanitizeLog } from './cli-helpers';
+import * as crypto from 'node:crypto';
 
 export interface SetupResult {
   client: ZenClient;
@@ -52,8 +52,8 @@ export async function createGrants(
   deviceAId: string,
   deviceBId: string
 ): Promise<void> {
-  await client.createGrant(deviceAId, 'file_path', '/tmp/source.txt', ['transfer']);
-  await client.createGrant(deviceBId, 'file_path', '/tmp/dest.txt', ['transfer']);
+  await client.createGrant(deviceAId, 'file_path', 'memory://source.txt', ['transfer']);
+  await client.createGrant(deviceBId, 'file_path', 'memory://dest.txt', ['transfer']);
   success('Grants created for both devices');
 }
 
@@ -82,8 +82,8 @@ export async function createAndApproveTask(
     targetDeviceId,
     'transfer_file',
     {
-      sourcePath: '/tmp/source.txt',
-      targetPath: '/tmp/dest.txt',
+      sourcePath: 'memory://source.txt',
+      targetPath: 'memory://dest.txt',
       expectedDigest: testData.digest,
       expectedByteCount: testData.byteCount,
     }
@@ -102,11 +102,11 @@ export function displayTaskResult(task: any): void {
   
   if (task.state === 'SUCCEEDED' && task.transferResult) {
     console.log('  Transfer Result:');
-    console.log(`    - Actual digest: ${task.transferResult.actualDigest || 'N/A'}`);
+    console.log(`    - Actual digest: ${sanitizeLog(task.transferResult.actualDigest || 'N/A')}`);
     console.log(`    - Actual bytes: ${task.transferResult.actualByteCount || 'N/A'}`);
     console.log(`    - Source grant checked: ${task.transferResult.sourceGrantChecked}`);
     console.log(`    - Target grant checked: ${task.transferResult.targetGrantChecked}`);
   } else if (task.state === 'FAILED') {
-    console.log(`  Failure reason: ${task.failureReason || 'Unknown'}`);
+    console.log(`  Failure reason: ${sanitizeLog(task.failureReason || 'Unknown')}`);
   }
 }

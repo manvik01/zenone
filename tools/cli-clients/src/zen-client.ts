@@ -124,7 +124,7 @@ export class ZenClient {
   }
 
   async confirmPairing(deviceId: string, pairingCode: string): Promise<Device> {
-    const response = await this.client.post(`/v1/devices/pair/confirm/${deviceId}`, {
+    const response = await this.client.post(`/v1/devices/pair/confirm/${encodeURIComponent(deviceId)}`, {
       pairingCode,
     });
     return response.data;
@@ -136,17 +136,17 @@ export class ZenClient {
   }
 
   async getDevice(deviceId: string): Promise<Device> {
-    const response = await this.client.get(`/v1/devices/${deviceId}`);
+    const response = await this.client.get(`/v1/devices/${encodeURIComponent(deviceId)}`);
     return response.data;
   }
 
   async updatePresence(deviceId: string): Promise<{ deviceId: string; lastSeen: string; isOnline: boolean }> {
-    const response = await this.client.post(`/v1/devices/${deviceId}/heartbeat`);
+    const response = await this.client.post(`/v1/devices/${encodeURIComponent(deviceId)}/heartbeat`);
     return response.data;
   }
 
   async revokeDevice(deviceId: string): Promise<{ message: string; deviceId: string; revokedAt: string }> {
-    const response = await this.client.delete(`/v1/devices/${deviceId}`);
+    const response = await this.client.delete(`/v1/devices/${encodeURIComponent(deviceId)}`);
     return response.data;
   }
 
@@ -168,7 +168,7 @@ export class ZenClient {
   }
 
   async revokeGrant(grantId: string): Promise<Grant> {
-    const response = await this.client.delete(`/v1/zencontrol/grants/${grantId}`);
+    const response = await this.client.delete(`/v1/zencontrol/grants/${encodeURIComponent(grantId)}`);
     return response.data;
   }
 
@@ -200,31 +200,31 @@ export class ZenClient {
   }
 
   async getTask(taskId: string): Promise<Task> {
-    const response = await this.client.get(`/v1/tasks/${taskId}`);
+    const response = await this.client.get(`/v1/tasks/${encodeURIComponent(taskId)}`);
     return response.data;
   }
 
   async getTaskStatus(taskId: string): Promise<{ taskId: string; state: string; updatedAt: string }> {
-    const response = await this.client.get(`/v1/tasks/${taskId}/status`);
+    const response = await this.client.get(`/v1/tasks/${encodeURIComponent(taskId)}/status`);
     return response.data;
   }
 
   async approveTask(taskId: string, approvedBy?: string): Promise<Task> {
-    const response = await this.client.post(`/v1/tasks/${taskId}/approve`, {
+    const response = await this.client.post(`/v1/tasks/${encodeURIComponent(taskId)}/approve`, {
       approvedBy,
     });
     return response.data;
   }
 
   async cancelTask(taskId: string, cancelReason?: string): Promise<Task> {
-    const response = await this.client.post(`/v1/tasks/${taskId}/cancel`, {
+    const response = await this.client.post(`/v1/tasks/${encodeURIComponent(taskId)}/cancel`, {
       cancelReason,
     });
     return response.data;
   }
 
   async executeTask(taskId: string): Promise<Task> {
-    const response = await this.client.post(`/v1/tasks/${taskId}/execute`);
+    const response = await this.client.post(`/v1/tasks/${encodeURIComponent(taskId)}/execute`);
     return response.data;
   }
 }

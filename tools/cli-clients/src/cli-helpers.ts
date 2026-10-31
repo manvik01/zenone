@@ -29,25 +29,29 @@ export function prompt(question: string): Promise<string> {
   });
 }
 
+export function sanitizeLog(str: string): string {
+  return str.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+}
+
 export function log(message: string): void {
-  console.log(chalk.blue('→'), message);
+  console.log(chalk.blue('→'), sanitizeLog(message));
 }
 
 export function success(message: string): void {
-  console.log(chalk.green('✓'), message);
+  console.log(chalk.green('✓'), sanitizeLog(message));
 }
 
 export function error(message: string): void {
-  console.log(chalk.red('✗'), message);
+  console.log(chalk.red('✗'), sanitizeLog(message));
 }
 
 export function info(message: string): void {
-  console.log(chalk.yellow('ℹ'), message);
+  console.log(chalk.yellow('ℹ'), sanitizeLog(message));
 }
 
 export function section(title: string): void {
   console.log('\n' + chalk.bold.cyan('='.repeat(60)));
-  console.log(chalk.bold.cyan(`  ${title}`));
+  console.log(chalk.bold.cyan(`  ${sanitizeLog(title)}`));
   console.log(chalk.bold.cyan('='.repeat(60)) + '\n');
 }
 

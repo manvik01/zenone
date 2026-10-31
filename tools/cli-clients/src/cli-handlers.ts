@@ -1,5 +1,5 @@
 import { ZenClient } from './zen-client';
-import { prompt, log, success, error, sanitizeToken } from './cli-helpers';
+import { prompt, log, success, error, sanitizeToken, sanitizeLog } from './cli-helpers';
 import chalk from 'chalk';
 
 export async function handleLogin(client: ZenClient): Promise<void> {
@@ -49,12 +49,12 @@ export async function handleListDevices(client: ZenClient): Promise<void> {
     const devices = await client.listDevices();
     success(`Found ${devices.length} devices:`);
     devices.forEach((d, i) => {
-      console.log(`\n  ${i + 1}. ${d.deviceName} (${d.platform})`);
-      console.log(`     Device ID: ${d.deviceId}`);
-      console.log(`     Status: ${d.trustStatus}, Online: ${d.isOnline}`);
-      console.log(`     Capabilities: ${d.capabilities.join(', ')}`);
+      console.log(`\n  ${i + 1}. ${sanitizeLog(d.deviceName)} (${sanitizeLog(d.platform)})`);
+      console.log(`     Device ID: ${sanitizeLog(d.deviceId)}`);
+      console.log(`     Status: ${sanitizeLog(d.trustStatus)}, Online: ${d.isOnline}`);
+      console.log(`     Capabilities: ${d.capabilities.map(c => sanitizeLog(c)).join(', ')}`);
       if (d.revokedAt) {
-        console.log(chalk.red(`     Revoked at: ${d.revokedAt}`));
+        console.log(chalk.red(`     Revoked at: ${sanitizeLog(String(d.revokedAt))}`));
       }
     });
   } catch (err: any) {
@@ -94,12 +94,12 @@ export async function handleListGrants(client: ZenClient): Promise<void> {
     const grants = await client.listGrants();
     success(`Found ${grants.length} grants:`);
     grants.forEach((g, i) => {
-      console.log(`\n  ${i + 1}. Grant ${g.grantId}`);
-      console.log(`     Device: ${g.deviceId}`);
-      console.log(`     Resource: ${g.resourceType} - ${g.resourcePath}`);
-      console.log(`     Capabilities: ${g.capabilities.join(', ')}`);
+      console.log(`\n  ${i + 1}. Grant ${sanitizeLog(g.grantId)}`);
+      console.log(`     Device: ${sanitizeLog(g.deviceId)}`);
+      console.log(`     Resource: ${sanitizeLog(g.resourceType)} - ${sanitizeLog(g.resourcePath)}`);
+      console.log(`     Capabilities: ${g.capabilities.map(c => sanitizeLog(c)).join(', ')}`);
       if (g.revokedAt) {
-        console.log(chalk.red(`     Revoked at: ${g.revokedAt}`));
+        console.log(chalk.red(`     Revoked at: ${sanitizeLog(String(g.revokedAt))}`));
       }
     });
   } catch (err: any) {
@@ -120,8 +120,8 @@ export async function handleCreateTask(client: ZenClient): Promise<void> {
     return;
   }
   
-  const byteCount = parseInt(byteCountStr, 10);
-  if (isNaN(byteCount) || byteCount < 0) {
+  const byteCount = Number.parseInt(byteCountStr, 10);
+  if (Number.isNaN(byteCount) || byteCount < 0) {
     error('Byte count must be a non-negative number');
     return;
   }
@@ -179,7 +179,7 @@ export async function handleExecuteTask(client: ZenClient): Promise<void> {
     
     if (task.state === 'SUCCEEDED' && task.transferResult) {
       console.log('  Transfer Result:');
-      console.log(`    Actual digest: ${task.transferResult.actualDigest || 'N/A'}`);
+      console.log(`    Actual digest: ${sanitizeLog(task.transferResult.actualDigest || 'N/A')}`);
       console.log(`    Actual bytes: ${task.transferResult.actualByteCount || 'N/A'}`);
       console.log(`    Source grant checked: ${task.transferResult.sourceGrantChecked}`);
       console.log(`    Target grant checked: ${task.transferResult.targetGrantChecked}`);
@@ -196,12 +196,12 @@ export async function handleListTasks(client: ZenClient): Promise<void> {
     const tasks = await client.listTasks();
     success(`Found ${tasks.length} tasks:`);
     tasks.forEach((t, i) => {
-      console.log(`\n  ${i + 1}. Task ${t.taskId}`);
-      console.log(`     Action: ${t.actionType}`);
-      console.log(`     State: ${t.state}`);
-      console.log(`     Source: ${t.sourceDeviceId}`);
-      console.log(`     Target: ${t.targetDeviceId}`);
-      console.log(`     Created: ${t.createdAt}`);
+      console.log(`\n  ${i + 1}. Task ${sanitizeLog(t.taskId)}`);
+      console.log(`     Action: ${sanitizeLog(t.actionType)}`);
+      console.log(`     State: ${sanitizeLog(t.state)}`);
+      console.log(`     Source: ${sanitizeLog(t.sourceDeviceId)}`);
+      console.log(`     Target: ${sanitizeLog(t.targetDeviceId)}`);
+      console.log(`     Created: ${sanitizeLog(String(t.createdAt))}`);
     });
   } catch (err: any) {
     error(`Failed to list tasks: ${err.response?.data?.message || err.message}`);

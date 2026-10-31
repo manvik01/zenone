@@ -35,6 +35,14 @@ export class CreateTaskDto {
   idempotencyKey?: string;
 }
 
+export interface TransferResult {
+  actualDigest?: string;
+  actualByteCount?: number;
+  sourceGrantChecked: boolean;
+  targetGrantChecked: boolean;
+  error?: string;
+}
+
 export class Task {
   taskId: string;
   userId: string;
@@ -51,6 +59,8 @@ export class Task {
   canceledAt?: Date;
   cancelReason?: string;
   failureReason?: string;
+  completedAt?: Date;
+  transferResult?: TransferResult;
 }
 
 export class TaskResponseDto {
@@ -69,6 +79,8 @@ export class TaskResponseDto {
   canceledAt?: Date;
   cancelReason?: string;
   failureReason?: string;
+  completedAt?: Date;
+  transferResult?: TransferResult;
 }
 
 export class ApproveTaskDto {

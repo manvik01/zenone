@@ -5,9 +5,10 @@ import { TaskValidationService } from './task-validation.service';
 import { DevicesModule } from '../devices/devices.module';
 import { IdentityModule } from '../identity/identity.module';
 import { TransfersModule } from '../transfers/transfers.module';
+import { ZencontrolModule } from '../zencontrol/zencontrol.module';
 
 @Module({
-  imports: [DevicesModule, IdentityModule, forwardRef(() => TransfersModule)],
+  imports: [DevicesModule, IdentityModule, ZencontrolModule, forwardRef(() => TransfersModule)],
   controllers: [TasksController],
   providers: [TasksService, TaskValidationService],
   exports: [TasksService, TaskValidationService],

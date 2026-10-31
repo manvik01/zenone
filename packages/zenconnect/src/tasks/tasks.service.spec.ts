@@ -3,6 +3,8 @@ import { BadRequestException } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { TaskValidationService } from './task-validation.service';
 import { DevicesService } from '../devices/devices.service';
+import { GrantsService } from '../zencontrol/grants.service';
+import { AuditService } from '../zencontrol/audit.service';
 import { ActionType, TaskState, CreateTaskDto } from '../common/dto/task.dto';
 
 describe('TasksService (M4 State Machine)', () => {
@@ -24,6 +26,18 @@ describe('TasksService (M4 State Machine)', () => {
           useValue: {
             findById: jest.fn(),
             canDeviceExecuteTasks: jest.fn(),
+          },
+        },
+        {
+          provide: GrantsService,
+          useValue: {
+            checkGrant: jest.fn(),
+          },
+        },
+        {
+          provide: AuditService,
+          useValue: {
+            recordCheck: jest.fn(),
           },
         },
       ],

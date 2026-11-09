@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { IdentityController } from './identity.controller';
 import { IdentityService } from './identity.service';
@@ -7,6 +7,8 @@ import { SessionService } from './session.service';
 import { VerificationService } from './verification.service';
 import { JwtService } from '@nestjs/jwt';
 import { AccountStatus } from '../common/dto/user.dto';
+import { createValidationPipe } from '../common/validation.pipe';
+import { HttpExceptionFilter } from '../common/http-exception.filter';
 
 describe('IdentityController (Integration)', () => {
   let app: INestApplication;
@@ -46,7 +48,8 @@ describe('IdentityController (Integration)', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe());
+    app.useGlobalPipes(createValidationPipe());
+    app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
 
     identityService = module.get<IdentityService>(IdentityService);
@@ -93,6 +96,17 @@ describe('IdentityController (Integration)', () => {
         .send({
           email: 'test@example.com',
           password: 'short',
+        })
+        .expect(400);
+    });
+
+    it('should reject unknown fields', () => {
+      return request(app.getHttpServer())
+        .post('/v1/auth/register')
+        .send({
+          email: 'extra@example.com',
+          password: 'SecurePass123!',
+          admin: true,
         })
         .expect(400);
     });

@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsObject, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsObject, IsOptional, IsNotEmpty } from 'class-validator';
 
 export enum TaskState {
   QUEUED = 'QUEUED',
@@ -19,9 +19,11 @@ export enum ActionType {
 
 export class CreateTaskDto {
   @IsString()
+  @IsNotEmpty()
   sourceDeviceId: string;
 
   @IsString()
+  @IsNotEmpty()
   targetDeviceId: string;
 
   @IsEnum(ActionType)

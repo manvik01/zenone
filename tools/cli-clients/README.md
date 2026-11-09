@@ -2,6 +2,8 @@
 
 Simulated CLI clients for demonstrating the ZenOne happy path end-to-end.
 
+Clone-to-demo (server + these clients): see the [root README runbook](../../README.md).
+
 ## Overview
 
 This package provides:

@@ -1,6 +1,6 @@
 # ZenOne — First Prototype Plan
 
-**Doc ID:** ZENONE-PROTO-001 · **Version:** 0.0.2 · **Status:** In progress — NestJS scaffold complete, critical decisions locked
+**Doc ID:** ZENONE-PROTO-001 · **Version:** 0.0.2 · **Status:** M0–M8 complete (NestJS ZenConnect + CLI clients + hardening/runbook)
 
 ## Goal
 

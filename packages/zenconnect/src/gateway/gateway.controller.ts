@@ -8,7 +8,7 @@ export class GatewayController {
       status: 'ok',
       timestamp: new Date().toISOString(),
       service: 'zenconnect',
-      version: '0.0.2',
+      version: '0.0.3',
     };
   }
 
@@ -16,7 +16,7 @@ export class GatewayController {
   root() {
     return {
       service: 'ZenConnect',
-      version: '0.0.2',
+      version: '0.0.3',
       description: 'ZenConnect cloud orchestration layer - prototype',
       endpoints: {
         health: '/health',

@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsEnum } from 'class-validator';
+import { IsString, IsNumber, IsEnum, IsNotEmpty } from 'class-validator';
 
 export enum TransferStatus {
   PENDING = 'PENDING',
@@ -13,15 +13,19 @@ export enum TransferStatus {
 
 export class CreateTransferDto {
   @IsString()
+  @IsNotEmpty()
   taskId: string;
 
   @IsString()
+  @IsNotEmpty()
   sourceDeviceId: string;
 
   @IsString()
+  @IsNotEmpty()
   destinationDeviceId: string;
 
   @IsString()
+  @IsNotEmpty()
   fileDigest: string;
 
   @IsNumber()

@@ -1,8 +1,8 @@
-# ZenConnect - Identity, Device & Task Management (M1 + M2 + M4)
+# ZenConnect - Identity, Device & Task Management (M1–M8)
 
 ## Overview
 
-ZenConnect implements secure identity management, device pairing and presence, and task state machine for ZenOne. Features include email/password authentication, JWT sessions, device pairing with trust status, and typed task orchestration with human approval flow.
+ZenConnect implements identity, device pairing, ZenControl grants, the task state machine, and a transfer stub for the ZenOne prototype. **How to clone, start, and demo:** see the [root README runbook](../../README.md). This file is the API reference.
 
 ## Features
 
@@ -507,7 +507,7 @@ Authorization: Bearer <access_token>
 **Development:**
 - Currently HTTP for local development
 - JWT secret configurable via `JWT_SECRET` environment variable
-- Default dev secret: `zenone-dev-secret-change-in-production`
+- Default **development** secret: `zenone-dev-secret-change-in-production` (production refuses this value)
 
 **TLS Configuration Example (nginx):**
 ```nginx
@@ -575,13 +575,16 @@ All tests follow strict TDD - written before implementation.
 
 ### Environment Variables
 
+Copy `.env.example` to `.env`. See the [root runbook](../../README.md) for the full table.
+
 ```bash
-# Required for production
+# Required when NODE_ENV=production (non-default, min 32 characters)
 JWT_SECRET=your-secret-key-min-32-characters
 
 # Optional
-NODE_ENV=production
+NODE_ENV=development
 PORT=3000
+CORS_ORIGIN=*
 ```
 
 ### Running
@@ -608,12 +611,15 @@ Example: User logs in from laptop and phone simultaneously - both devices get va
 
 ## Implementation Status
 
-- ✅ **M1 (Identity)**: Complete - JWT auth, email verification, password recovery
-- ✅ **M2 (Device Management)**: Complete - Pairing, presence, revocation, task validation
-- ✅ **M4 (Task State Machine)**: Complete - Typed actions, approval flow, state transitions, expiry (M5 will add transfer execution)
-- 🔜 **M3 (Grants)**: File-level permissions for transfers
-- 🔜 **M5 (Transfer Execution)**: File transfer coordination with checksums, EXECUTING → SUCCEEDED/FAILED states
-- 🔜 **M6-M8**: AI intent routing, context sync, full integration
+- ✅ **M1 (Identity)**: JWT auth, email verification, password recovery
+- ✅ **M2 (Device Management)**: Pairing, presence, revocation, task validation
+- ✅ **M3 (ZenControl)**: Folder/file grants, capability checks, audit
+- ✅ **M4 (Task State Machine)**: Typed actions, approval flow, state transitions, expiry
+- ✅ **M5 (Transfer stub)**: Checksums, byte count, ACL, EXECUTING → SUCCEEDED/FAILED
+- ✅ **M6 (Expiry / recheck)**: QUEUED expiry, grant and device recheck before execute
+- ✅ **M7 (CLI clients)**: Simulated Device A/B + happy-path / revoke / expiry demos
+- ✅ **M8 (Hardening)**: Env JWT secret, no stacks in non-dev, DTO validation, runbook
+- ⏸️ **Deferred:** AI intent router, Journey C sync, real Android/Windows apps, production DB/TLS
 
 ## Scope Lock
 

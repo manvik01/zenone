@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, NotFoundException } from '@nestjs/common';
 import { TransfersService } from './transfers.service';
 import { CreateTransferDto, TransferResponseDto, TransferStatus } from '../common/dto/transfer.dto';
 
@@ -16,7 +16,7 @@ export class TransfersController {
   getTransfer(@Param('transferId') transferId: string): TransferResponseDto {
     const transfer = this.transfersService.findById(transferId);
     if (!transfer) {
-      throw new Error('Transfer not found');
+      throw new NotFoundException('Transfer not found');
     }
     return this.toResponseDto(transfer);
   }

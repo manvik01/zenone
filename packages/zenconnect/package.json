@@ -1,6 +1,6 @@
 {
   "name": "zenconnect",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "ZenConnect cloud orchestration layer - prototype",
   "main": "dist/main.js",
   "scripts": {

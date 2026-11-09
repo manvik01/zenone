@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsArray, IsDateString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEnum, IsArray, IsDateString, IsOptional, IsNotEmpty } from 'class-validator';
 
 export enum ResourceType {
   FILE_PATH = 'file_path',
@@ -19,12 +19,14 @@ export enum AuditResult {
 
 export class CreateGrantDto {
   @IsString()
+  @IsNotEmpty()
   deviceId: string;
 
   @IsEnum(ResourceType)
   resourceType: ResourceType;
 
   @IsString()
+  @IsNotEmpty()
   resourcePath: string;
 
   @IsArray()
@@ -62,12 +64,14 @@ export class GrantResponseDto {
 
 export class CheckGrantDto {
   @IsString()
+  @IsNotEmpty()
   deviceId: string;
 
   @IsEnum(ResourceType)
   resourceType: ResourceType;
 
   @IsString()
+  @IsNotEmpty()
   resourcePath: string;
 
   @IsEnum(Capability)

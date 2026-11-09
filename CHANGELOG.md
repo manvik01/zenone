@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.0.3 — 2026-11-09 — M8 hardening and runbook
+
+- JWT secret from `JWT_SECRET`; production refuses missing, default, or short secrets
+- HTTP errors omit stack traces unless `NODE_ENV=development`
+- Shared DTO ValidationPipe (`whitelist` + `forbidNonWhitelisted`); required strings `@IsNotEmpty()`
+- CORS origin from `CORS_ORIGIN` (prototype default: allow-all); rate limiting documented as not implemented
+- `.env.example` matches running code; NestJS logger in bootstrap
+- Root README runbook: clone → install → start ZenConnect → Device A/B or `demo:happy-path` / revoke / expiry
+- `docs/PRODUCTION.md` lists prototype shortcuts (in-memory, no TLS) — not a production deploy
+- M7 CLI clients unchanged
+
 ## v0.0.2 — 2026-10-31 — Prototype scaffolding
 
 - **Architecture decisions locked:**

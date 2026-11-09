@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsEnum, IsArray, IsOptional, IsNotEmpty } from 'class-validator';
 
 export enum Platform {
   ANDROID = 'ANDROID',
@@ -15,12 +15,14 @@ export enum TrustStatus {
 
 export class PairDeviceStartDto {
   @IsString()
+  @IsNotEmpty()
   deviceName: string;
 
   @IsEnum(Platform)
   platform: Platform;
 
   @IsString()
+  @IsNotEmpty()
   publicKey: string;
 
   @IsArray()
@@ -30,6 +32,7 @@ export class PairDeviceStartDto {
 
 export class PairDeviceConfirmDto {
   @IsString()
+  @IsNotEmpty()
   pairingCode: string;
 }
 
